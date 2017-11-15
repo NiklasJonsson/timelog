@@ -171,6 +171,7 @@ impl FromStr for TimeLogDay {
 }
 
 impl Display for TimeLogDay {
+// TODO: Remove everything but hours and minute for NaiveTime before printing
 
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         let mut s = String::new();

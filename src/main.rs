@@ -87,6 +87,7 @@ fn main() {
     } else if args.cmd_auto {
         debug_assert!(false, "Not implemented yet!");
     } else {
+        // TODO: Add hpurs left this week
         println!("{} left of {} this month", tl.hours_left_this_month(), tl.total_hours_this_month());
     }
     match tl.save() {
