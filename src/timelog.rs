@@ -101,6 +101,11 @@ impl Month {
  * <weekday> is Mon...Sun
  */
 
+
+// TODO: Just make TimeLogDay have an instance of DateTime/NaiveDate
+// and we wont have to worry about day indices. We get weekday generation for free
+//
+// FIXME: The weekday is not correct in the logfile.
 #[derive(Copy, Clone, Debug)]
 struct TimeLogDay {
     start: Option<NaiveTime>,

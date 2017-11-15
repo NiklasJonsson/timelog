@@ -28,6 +28,17 @@ Options:
   -h --help     Show this screen.
 ";
 
+// TODO: Nice features:
+// How many hours have I worked today?
+// How many hours left today?
+// How many hours have i Worked this week?
+// How many hours left his week?
+// Remaing hours / remaiing days (avg)
+// Close to optimal schedule?
+// Given some constraints, how should I plan my week?
+// e.g. end 16.15 tuesday and thursday. Start 9.15 mon/wed.
+// End at 15 friday. Wednesaday, end at 17.30
+
 #[derive(Debug, Deserialize)]
 struct Args {
 	cmd_start: bool,
