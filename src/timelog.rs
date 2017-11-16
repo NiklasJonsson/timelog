@@ -187,7 +187,7 @@ impl Display for TimeLogDay {
             s.push_str("  Start: UNDEF\n");
         }
         if let Some(x) = self.end {
-            s.push_str(format!("{}Start: {}\n", DAY_INDENT, x).as_str());
+            s.push_str(format!("{}End: {}\n", DAY_INDENT, x).as_str());
         } else {
             s.push_str("  End: UNDEF\n");
         }
