@@ -111,15 +111,13 @@ struct TimeLogDay {
     start: Option<NaiveTime>,
     end: Option<NaiveTime>,
     acc_break: Duration,
-    day: Weekday,
-    day_idx: usize,
-    month_idx: usize,
+    date: NaiveDate,
 }
 
 const DAY_INDENT: &str = "  ";
 impl TimeLogDay {
-    fn new(day: Weekday, day_idx: usize, month_idx: usize) -> Self {
-        TimeLogDay{day: day, start: None, end: None, acc_break: Duration::seconds(0), day_idx: day_idx, month_idx: month_idx}
+    fn new(date: NaiveDate) -> Self {
+        TimeLogDay{start: None, end: None, acc_break: Duration::seconds(0), date: date}
     }
 
     fn set_start(&mut self, time: NaiveTime) {
@@ -135,7 +133,7 @@ impl TimeLogDay {
     }
 
     fn is_workday(&self) -> bool {
-        return self.day != Weekday::Sat && self.day != Weekday::Sun;
+        return self.date.weekday() != Weekday::Sat && self.date.weekday() != Weekday::Sun;
     }
 }
 
@@ -150,28 +148,33 @@ fn try_get_naivetime(s: &str) -> Option<NaiveTime> {
     }
 }
 
+macro_rules! NAIVEDATE_FORMAT_STRING {
+    () => ("%d/%m/%Y %A");
+}
+macro_rules! start_format_str {
+    ( $x:expr ) => (format!("  Start: {}\n", $x).as_str());
+}
+macro_rules! end_format_str {
+    ( $x:expr ) => (format!("  End: {}\n", $x).as_str());
+}
+
 /*
- * <DD/MM> <Weekday>
+ * <NaiveDate-format-string>
  *   Start: <NaiveTime>
  *   End: <NaiveTime>
  *   Accumulated break: <Duration>
  */
 impl FromStr for TimeLogDay {
-    type Err = String;
+    type Err = chrono::ParseError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let lines: Vec<&str> = s.lines().collect();
-        let date_re = Regex::new(r"(\d\d)/(\d\d) (\w+)").unwrap();
-        let caps = date_re.captures(lines[0]).ok_or("Invalid file contents")?;
-        let day_idx = usize::from_str(&caps[1]).unwrap();
-        let month_idx = usize::from_str(&caps[2]).unwrap();
+        let date = NaiveDate::parse_from_str(lines[0].trim(), NAIVEDATE_FORMAT_STRING!())?;
 
-        let wday: Weekday = Weekday::from_str(caps[3].trim()).unwrap();
         let start = try_get_naivetime(lines[1].split(' ').nth(1).unwrap().trim());
         let end = try_get_naivetime(lines[2].split(' ').nth(1).unwrap().trim());
         let acc_br = parse_duration(lines[3].split(' ').nth(2).unwrap().trim()).unwrap();
-        return Ok(TimeLogDay{start: start, end:end, acc_break: acc_br,
-            day: wday, day_idx: day_idx, month_idx: month_idx});
+        return Ok(TimeLogDay{start: start, end:end, acc_break: acc_br, date: date});
     }
 }
 
@@ -180,18 +183,19 @@ impl Display for TimeLogDay {
 
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         let mut s = String::new();
-        s.push_str(&format!("{:02}/{:02} {:?}\n", self.day_idx, self.month_idx, self.day));
+        s.push_str(self.date.format(NAIVEDATE_FORMAT_STRING!()).to_string().as_str());
+        s.push('\n');
         if let Some(x) = self.start {
-            s.push_str(format!("{}Start: {}\n", DAY_INDENT, x).as_str());
+            s.push_str(start_format_str!(x));
         } else {
-            s.push_str("  Start: UNDEF\n");
+            s.push_str(start_format_str!("UNDEF"));
         }
         if let Some(x) = self.end {
-            s.push_str(format!("{}Start: {}\n", DAY_INDENT, x).as_str());
+            s.push_str(end_format_str!(x));
         } else {
-            s.push_str("  End: UNDEF\n");
+            s.push_str(end_format_str!("UNDEF"));
         }
-        s.push_str(&format!("{}Accumulated break: {:02};{:02}\n", DAY_INDENT, self.acc_break.num_hours(), self.acc_break.num_minutes() % 60));
+        s.push_str(&format!("  Accumulated break: {:02};{:02}\n", self.acc_break.num_hours(), self.acc_break.num_minutes() % 60));
         write!(f, "{}", s)
     }
 }
@@ -209,6 +213,7 @@ impl TimeLogMonth {
         let mut days = Vec::with_capacity(n_days);
         let mut wd = first_weekday;
         for i in 0..n_days {
+            // TODO: Continue here
             days.push(TimeLogDay::new(wd, i + 1, month as usize));
             wd = wd.succ();
         }
