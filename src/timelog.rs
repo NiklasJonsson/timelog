@@ -163,6 +163,7 @@ struct TimeLogMonth {
 }
 
 impl TimeLogMonth {
+
     fn empty(first_date: NaiveDate) -> Self {
         let month = first_date.month0();
         let n_days = MONTH_2_NDAYS[month as usize];
@@ -203,13 +204,20 @@ macro_rules! TIMELOGMONTH_NAIVEDATE_FORMAT_STRING {
 }
 
 impl FromStr for TimeLogMonth {
-    type Err = chrono::ParseError;
+    type Err = String;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let mut days: Vec<TimeLogDay> = Vec::with_capacity(MAX_DAYS_IN_MONTH);
         let mut line_it = s.lines();
+        let month_line = match line_it.next() {
+          Some(x) => x.trim(),
+          None => return Err("Can't read file".to_owned()),
+        };
 
-        let first_date = NaiveDate::parse_from_str(line_it.next().unwrap().trim(), TIMELOGMONTH_NAIVEDATE_FORMAT_STRING!())?;
+        let first_date = match NaiveDate::parse_from_str(month_line, TIMELOGMONTH_NAIVEDATE_FORMAT_STRING!()) {
+          Ok(x) => x,
+          Err(_) => return Err("Can't read file".to_owned()),
+        };
 
         let days_it = line_it.enumerate().fold(Vec::new(), |mut acc: Vec<String>, (i, x)| {
             if i % 4 == 0 {
@@ -231,7 +239,7 @@ impl FromStr for TimeLogMonth {
 impl fmt::Display for TimeLogMonth {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let mut s = String::new();
-        s.push_str(self.first_date.format(TIMELOGDAY_NAIVEDATE_FORMAT_STRING!()).to_string().as_str());
+        s.push_str(self.first_date.format(TIMELOGMONTH_NAIVEDATE_FORMAT_STRING!()).to_string().as_str());
         s.push_str("\n");
         for i in 0..self.n_days {
             s.push_str(self.days[i].to_string().as_str());
@@ -243,6 +251,11 @@ impl fmt::Display for TimeLogMonth {
 pub struct TimeLogger {
     tl_month: TimeLogMonth,
     file_path: PathBuf,
+}
+
+fn month_to_idx(m: u32) -> usize {
+  debug_assert!(m >= 1 && m <= 12);
+  return (m - 1) as usize;
 }
 
 const TIMELOGGER_FOLDER: &str = ".timelog";
@@ -271,7 +284,7 @@ impl TimeLogger {
             std::fs::create_dir(path_buf.as_path());
         }
 
-        path_buf.push(MONTH_2_STR[month as usize]);
+        path_buf.push(MONTH_2_STR[month_to_idx(month)]);
         path_buf.set_extension("tl");
 
         if !path_buf.as_path().exists() {
