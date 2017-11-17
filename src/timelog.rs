@@ -8,6 +8,7 @@ use std::io::prelude::*;
 use std::fs::File;
 use std;
 use std::fmt;
+use std::io;
 use std::fmt::Display;
 use std::fmt::Formatter;
 use std::str::FromStr;
@@ -156,9 +157,9 @@ impl Display for TimeLogDay {
     }
 }
 
-// FUTURE: Can we calculate n_days with NaiveDate instead fo function lookup?
+// TODO: Can we calculate n_days with NaiveDate instead fo function lookup?
+// TODO: Create custom Error type
 struct TimeLogMonth {
-    first_date: NaiveDate, // First date of the month. contains year month and day
     n_days: usize,
     days: Vec<TimeLogDay>,
 }
@@ -173,7 +174,7 @@ impl TimeLogMonth {
         for i in 0..n_days {
             days.push(TimeLogDay::new(NaiveDate::from_ymd(first_date.year(), first_date.month(), (i + 1) as u32)));
         }
-        TimeLogMonth{n_days: n_days, days: days, first_date: first_date}
+        TimeLogMonth{n_days: n_days, days: days}
     }
 
     fn compute_hours_worked(&self) -> Duration {
@@ -200,25 +201,12 @@ impl TimeLogMonth {
     }
 }
 
-macro_rules! TIMELOGMONTH_NAIVEDATE_FORMAT_STRING {
-    () => ("%B %Y");
-}
-
 impl FromStr for TimeLogMonth {
     type Err = String;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let mut days: Vec<TimeLogDay> = Vec::with_capacity(MAX_DAYS_IN_MONTH);
-        let mut line_it = s.lines();
-        let month_line = match line_it.next() {
-          Some(x) => x.trim(),
-          None => return Err("Can't read file".to_owned()),
-        };
-
-        let first_date = match NaiveDate::parse_from_str(month_line, TIMELOGMONTH_NAIVEDATE_FORMAT_STRING!()) {
-          Ok(x) => x,
-          Err(_) => return Err("Can't read file".to_owned()),
-        };
+        let line_it = s.lines();
 
         let days_it = line_it.enumerate().fold(Vec::new(), |mut acc: Vec<String>, (i, x)| {
             if i % 4 == 0 {
@@ -233,15 +221,13 @@ impl FromStr for TimeLogMonth {
             days.push(TimeLogDay::from_str(day.as_str()).unwrap());
         }
 
-        Ok(TimeLogMonth{first_date: first_date, n_days: MONTH_2_NDAYS[first_date.month0() as usize], days: days})
+        Ok(TimeLogMonth{n_days: MONTH_2_NDAYS[days[0].date.month0() as usize], days: days})
     }
 }
 
 impl fmt::Display for TimeLogMonth {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let mut s = String::new();
-        s.push_str(self.first_date.format(TIMELOGMONTH_NAIVEDATE_FORMAT_STRING!()).to_string().as_str());
-        s.push_str("\n");
         for i in 0..self.n_days {
             s.push_str(self.days[i].to_string().as_str());
         }
@@ -262,7 +248,7 @@ fn month_to_idx(m: u32) -> usize {
 const TIMELOGGER_FOLDER: &str = ".timelog";
 impl TimeLogger {
 
-    pub fn current_month() -> Result<Self, std::io::Error> {
+    pub fn current_month() -> Result<Self, io::Error> {
         /* Directory structure is:
          * $HOME/.timelog/
          *   2017/
@@ -276,13 +262,13 @@ impl TimeLogger {
         path_buf.push(TIMELOGGER_FOLDER);
 
         if !path_buf.as_path().exists() {
-            std::fs::create_dir(path_buf.as_path());
+            std::fs::create_dir(path_buf.as_path())?;
         }
 
         path_buf.push(year.to_string());
 
         if !path_buf.as_path().exists() {
-            std::fs::create_dir(path_buf.as_path());
+            std::fs::create_dir(path_buf.as_path())?;
         }
 
         path_buf.push(MONTH_2_STR[month_to_idx(month)]);
@@ -298,10 +284,10 @@ impl TimeLogger {
 
         let mut buf_reader = BufReader::new(file);
         let mut contents = String::new();
-        buf_reader.read_to_string(&mut contents);
+        buf_reader.read_to_string(&mut contents)?;
         let tlm: TimeLogMonth = match contents.parse() {
           Ok(x) => x,
-          Err(e) => return Err(std::io::Error::new(std::io::ErrorKind::InvalidData, format!("Incorrect log file format: {}", e).as_str())),
+          Err(e) => return Err(io::Error::new(io::ErrorKind::InvalidData, format!("Unable to parse logfile: {}", e).as_str())),
         };
 
         Ok(TimeLogger{tl_month: tlm, file_path: path_buf})
