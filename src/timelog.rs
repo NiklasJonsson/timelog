@@ -76,6 +76,7 @@ impl TimeLogDay {
     }
 
     fn set_start(&mut self, time: NaiveTime) {
+    println!("set_start: {}", time);
         self.start = Some(time);
     }
 
@@ -261,7 +262,7 @@ fn month_to_idx(m: u32) -> usize {
 const TIMELOGGER_FOLDER: &str = ".timelog";
 impl TimeLogger {
 
-    pub fn current_month() -> Self {
+    pub fn current_month() -> Result<Self, std::io::Error> {
         /* Directory structure is:
          * $HOME/.timelog/
          *   2017/
@@ -288,26 +289,22 @@ impl TimeLogger {
         path_buf.set_extension("tl");
 
         if !path_buf.as_path().exists() {
-            File::create(path_buf.as_path());
+            File::create(path_buf.as_path())?;
+            return Ok(TimeLogger{tl_month: TimeLogMonth::empty(NaiveDate::from_ymd(year, month, 1)),
+                                 file_path: path_buf});
         }
 
-        debug_assert!(path_buf.as_path().exists(), "logfile does not exist");
+        let file = File::open(path_buf.as_path())?;
 
-        let file = match File::open(path_buf.as_path()) {
-            Err(_) => File::create(path_buf.as_path()).unwrap(),
-            Ok(file) => file,
-        };
         let mut buf_reader = BufReader::new(file);
         let mut contents = String::new();
         buf_reader.read_to_string(&mut contents);
         let tlm: TimeLogMonth = match contents.parse() {
-            Ok(x) => x,
-            Err(_) => {
-                TimeLogMonth::empty(NaiveDate::from_ymd(year, month, 1))
-            },
+          Ok(x) => x,
+          Err(e) => return Err(std::io::Error::new(std::io::ErrorKind::InvalidData, format!("Incorrect log file format: {}", e).as_str())),
         };
 
-        TimeLogger{tl_month: tlm, file_path: path_buf}
+        Ok(TimeLogger{tl_month: tlm, file_path: path_buf})
     }
 
     pub fn hours_left_this_week(&self) -> u32 {

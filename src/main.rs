@@ -77,7 +77,12 @@ fn main() {
 		.and_then(|d| d.deserialize())
 		.unwrap_or_else(|e| e.exit());
 
-    let mut tl = TimeLogger::current_month();
+    let mut tl = match TimeLogger::current_month() {
+      Ok(x) => x,
+      Err(e) => {
+        panic!("ERROR: {}", e);
+      }
+    };
 
     if args.cmd_start {
         let time = match get_time(args.arg_time) {
