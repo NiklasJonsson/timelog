@@ -47,19 +47,14 @@ const MONTH_2_STR: [&str; MONTHS_IN_YEAR] =
 
 /*
  * Format:
- * <month-name>
- * <DD0/MM> <Weekday>
- *   Start: <Time>
- *   End: <Time>
+ * <NaiveDate>
+ *   Start: <NaiveTime>
+ *   End: <NaiveTime>
  *   Accumulated break: <Duration>
- * <DD1/MM> <weekday>
- *   Start: <Time>
- *   End: <Time>
+ * <NaiveDate>
+ *   Start: <NaiveTime>
+ *   End: <NaiveTime>
  *   Accumulated break: <Duration>
- * Where DD is day with two numbers, MM is month.
- * <Time> may be a either be a HH:MM or UNDEF if the value has not been set yet
- * <Duration> will be HH;MM
- * <weekday> is Mon...Sun
  */
 
 
@@ -157,11 +152,28 @@ impl Display for TimeLogDay {
     }
 }
 
-// TODO: Can we calculate n_days with NaiveDate instead fo function lookup?
 // TODO: Create custom Error type
 struct TimeLogMonth {
     n_days: usize,
     days: Vec<TimeLogDay>,
+}
+
+fn get_first_day_in_week_of(date: NaiveDate) -> NaiveDate {
+    let mut first_day = date;
+    while first_day.weekday() != Weekday::Mon && first_day.day0() != 0 {
+        first_day = first_day.pred();
+    }
+
+    return first_day;
+}
+
+fn get_last_day_in_week_of(date: NaiveDate) -> NaiveDate {
+    let mut last_day = date;
+    while last_day.weekday() != Weekday::Fri && last_day.day0() as usize != MONTH_2_NDAYS[date.month0() as usize] {
+        last_day = last_day.succ();
+    }
+
+    return last_day;
 }
 
 impl TimeLogMonth {
@@ -177,8 +189,8 @@ impl TimeLogMonth {
         TimeLogMonth{n_days: n_days, days: days}
     }
 
-    fn compute_hours_worked(&self) -> Duration {
-        self.days.iter().fold(Duration::zero(), |acc, day| {
+    fn compute_time_worked_between(&self, day1_idx: usize, day2_idx: usize) -> Duration {
+        self.days[day1_idx..day2_idx].iter().fold(Duration::zero(), |acc, day| {
             if day.start.is_some() && day.end.is_some() {
                 debug_assert!(day.end > day.start, "End of workday has to be after start");
                 return acc + day.end.unwrap().signed_duration_since(day.start.unwrap()) - day.acc_break;
@@ -187,8 +199,8 @@ impl TimeLogMonth {
         })
     }
 
-    fn compute_workable_hours(&self) -> Duration {
-        self.days.iter().fold(Duration::zero(), |acc, day| {
+    fn compute_workable_time_between(&self, first_day_idx: usize, last_day_idx: usize) -> Duration {
+        self.days[first_day_idx..last_day_idx].iter().fold(Duration::seconds(0), |acc, day| {
             if day.is_workday() {
                 return acc + Duration::hours(8);
             }
@@ -196,8 +208,32 @@ impl TimeLogMonth {
         })
     }
 
-    fn compute_hours_left(&self) -> Duration {
-        self.compute_workable_hours() - self.compute_hours_worked()
+    fn compute_time_worked(&self) -> Duration {
+        self.compute_time_worked_between(0, self.n_days)
+    }
+
+    fn compute_workable_time(&self) -> Duration {
+        self.compute_workable_time_between(0, self.n_days)
+    }
+
+    fn compute_workable_time_in_week_of(&self, date: NaiveDate) -> Duration {
+        let first_day_idx = get_first_day_in_week_of(date).day0() as usize;
+        let last_day_idx = get_last_day_in_week_of(date).day0() as usize;
+        self.compute_workable_time_between(first_day_idx, last_day_idx + 1)
+    }
+
+    fn compute_logged_time_in_week_of(&self, date: NaiveDate) -> Duration {
+        let first_day_idx = get_first_day_in_week_of(date).day() as usize;
+        let last_day_idx = get_last_day_in_week_of(date).day() as usize;
+        self.compute_time_worked_between(first_day_idx, last_day_idx + 1)
+    }
+
+    fn compute_time_left_in_week_of(&self, date: NaiveDate) -> Duration {
+        self.compute_workable_time_in_week_of(date) - self.compute_logged_time_in_week_of(date)
+    }
+
+    fn compute_time_left(&self) -> Duration {
+        self.compute_workable_time() - self.compute_time_worked()
     }
 }
 
@@ -271,6 +307,7 @@ impl TimeLogger {
             std::fs::create_dir(path_buf.as_path())?;
         }
 
+        // TODO Replace month_2_str format on naivedate
         path_buf.push(MONTH_2_STR[month_to_idx(month)]);
         path_buf.set_extension("tl");
 
@@ -293,17 +330,16 @@ impl TimeLogger {
         Ok(TimeLogger{tl_month: tlm, file_path: path_buf})
     }
 
-    pub fn hours_left_this_week(&self) -> u32 {
-        debug_assert!(false, "Not implemented");
-        return 0;
+    pub fn time_left_this_week(&self) -> Duration {
+        return self.tl_month.compute_time_left_in_week_of(Local::today().naive_local());
     }
 
     pub fn hours_left_this_month(&self) -> u32 {
-        self.tl_month.compute_hours_left().num_hours() as u32
+        self.tl_month.compute_time_left().num_hours() as u32
     }
 
     pub fn total_hours_this_month(&self) -> u32 {
-        self.tl_month.compute_workable_hours().num_hours() as u32
+        self.tl_month.compute_workable_time().num_hours() as u32
     }
 
     pub fn log_start(&mut self, time: NaiveTime) {
@@ -316,6 +352,14 @@ impl TimeLogger {
 
     pub fn log_break(&mut self, dur: Duration) {
         self.tl_month.days[Local::now().day0() as usize].add_break(dur);
+    }
+
+    pub fn todays_start(&self) -> Option<NaiveTime> {
+        self.tl_month.days[Local::today().day0() as usize].start
+    }
+
+    pub fn todays_break(&self) -> Duration {
+        self.tl_month.days[Local::today().day0() as usize].acc_break
     }
 
     pub fn save(&self) -> Result<(), std::io::Error> {
