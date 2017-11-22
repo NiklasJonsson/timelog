@@ -7,6 +7,7 @@ use std::io::BufReader;
 use std::io::prelude::*;
 use std::fs::File;
 use std;
+use std::fs;
 use std::fmt;
 use std::io;
 use std::fmt::Display;
@@ -29,21 +30,6 @@ pub fn parse_duration(s: &str) -> Result<Duration, String> {
 const MAX_DAYS_IN_MONTH: usize = 31;
 const MONTHS_IN_YEAR: usize = 12;
 const MONTH_2_NDAYS: [usize; MONTHS_IN_YEAR] = [31,28,31,30,31,30,31,31,30,31,30,31];
-const MONTH_2_STR: [&str; MONTHS_IN_YEAR] =
-[
-    "January",
-    "February",
-    "March",
-    "April",
-    "May",
-    "June",
-    "July",
-    "August",
-    "September",
-    "October",
-    "November",
-    "December",
-];
 
 /*
  * Format:
@@ -72,11 +58,12 @@ impl TimeLogDay {
     }
 
     fn set_start(&mut self, time: NaiveTime) {
-    println!("set_start: {}", time);
+        debug_assert!(time.nanosecond() == 0);
         self.start = Some(time);
     }
 
     fn set_end(&mut self, time: NaiveTime) {
+        debug_assert!(time.nanosecond() == 0);
         self.end = Some(time);
     }
 
@@ -131,8 +118,6 @@ impl FromStr for TimeLogDay {
 }
 
 impl Display for TimeLogDay {
-// TODO: Remove everything but hours and minute for NaiveTime before printing
-
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         let mut s = String::new();
         s.push_str(self.date.format(TIMELOGDAY_NAIVEDATE_FORMAT_STRING!()).to_string().as_str());
@@ -276,11 +261,6 @@ pub struct TimeLogger {
     file_path: PathBuf,
 }
 
-fn month_to_idx(m: u32) -> usize {
-  debug_assert!(m >= 1 && m <= 12);
-  return (m - 1) as usize;
-}
-
 const TIMELOGGER_FOLDER: &str = ".timelog";
 impl TimeLogger {
 
@@ -292,28 +272,28 @@ impl TimeLogger {
          *      February.tl
          *   2018/
          */
-        let year = Local::today().year();
-        let month = Local::today().month();
+        let today = Local::today();
         let mut path_buf = std::env::home_dir().unwrap();
+
+        // .timelog
         path_buf.push(TIMELOGGER_FOLDER);
-
         if !path_buf.as_path().exists() {
             std::fs::create_dir(path_buf.as_path())?;
         }
 
-        path_buf.push(year.to_string());
-
+        // .timelog/year/
+        path_buf.push(today.format("%Y/").to_string().as_str());
         if !path_buf.as_path().exists() {
             std::fs::create_dir(path_buf.as_path())?;
         }
 
-        // TODO Replace month_2_str format on naivedate
-        path_buf.push(MONTH_2_STR[month_to_idx(month)]);
+        // .timelog/year/month.tl
+        path_buf.push(today.format("%B").to_string().as_str());
         path_buf.set_extension("tl");
 
         if !path_buf.as_path().exists() {
             File::create(path_buf.as_path())?;
-            return Ok(TimeLogger{tl_month: TimeLogMonth::empty(NaiveDate::from_ymd(year, month, 1)),
+            return Ok(TimeLogger{tl_month: TimeLogMonth::empty(NaiveDate::from_ymd(today.year(), today.month(), 1)),
                                  file_path: path_buf});
         }
 
@@ -343,11 +323,13 @@ impl TimeLogger {
     }
 
     pub fn log_start(&mut self, time: NaiveTime) {
-        self.tl_month.days[Local::now().day0() as usize].set_start(time);
+        let hms_time = NaiveTime::from_hms(time.hour(), time.minute(), time.second());
+        self.tl_month.days[Local::now().day0() as usize].set_start(hms_time);
     }
 
     pub fn log_end(&mut self, time: NaiveTime) {
-        self.tl_month.days[Local::now().day0() as usize].set_end(time);
+        let hms_time = NaiveTime::from_hms(time.hour(), time.minute(), time.second());
+        self.tl_month.days[Local::now().day0() as usize].set_end(hms_time);
     }
 
     pub fn log_break(&mut self, dur: Duration) {
@@ -363,12 +345,22 @@ impl TimeLogger {
     }
 
     pub fn save(&self) -> Result<(), std::io::Error> {
+        let mut bkp = self.file_path.clone();
+        bkp.set_extension("tl.bkp");
+        let bkp_fp = bkp.as_path();
         let fp: &Path = self.file_path.as_path();
         debug_assert!(fp.exists(), "logfile does not exist");
-        // TODO: Write to backup file and then write actual logfile
         let mut file = File::create(fp)?;
         let s = format!("{}", self.tl_month);
-        file.write_all(s.as_str().as_bytes()).unwrap();
+        fs::copy(fp, bkp_fp)?;
+        match file.write_all(s.as_str().as_bytes()) {
+            Ok(_) => fs::remove_file(bkp_fp)?,
+            Err(e) => {
+                fs::copy(bkp_fp, fp)?;
+                return Err(io::Error::new(e.kind(), format!("Failed to save to file (restoring old): {}", e).as_str()));
+            },
+        };
+
         Ok(())
     }
 }
