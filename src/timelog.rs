@@ -19,7 +19,12 @@ use chrono::Duration;
 use chrono::Weekday;
 use chrono::prelude::*;
 
-pub fn parse_duration(s: &str) -> Result<Duration, String> {
+pub fn parse_duration(string: &str) -> Result<Duration, String> {
+    let s = string.trim();
+    // TODO: Handle these formats
+    // if ";" is ommitted => always minute
+    // 3;3 => 3 hrs, 3 min. Handle non zero-padded durations
+
     let dur: Vec<&str> = s.split(';').map(|x| x.trim()).collect();
     let h: i64 = dur[0].parse().unwrap();
     let m: i64 = dur[1].parse().unwrap();
@@ -42,7 +47,6 @@ const MONTH_2_NDAYS: [usize; MONTHS_IN_YEAR] = [31,28,31,30,31,30,31,31,30,31,30
  *   End: <NaiveTime>
  *   Accumulated break: <Duration>
  */
-
 
 #[derive(Copy, Clone, Debug)]
 struct TimeLogDay {
@@ -357,10 +361,12 @@ impl TimeLogger {
             Ok(_) => fs::remove_file(bkp_fp)?,
             Err(e) => {
                 fs::copy(bkp_fp, fp)?;
-                return Err(io::Error::new(e.kind(), format!("Failed to save to file (restoring old): {}", e).as_str()));
+                return Err(io::Error::new(e.kind(), format!("Failed to write to file (restoring backup): {}", e).as_str()));
             },
         };
 
         Ok(())
     }
 }
+
+// TODO Unit tests? - Maybe not necessary but good practice though

@@ -30,17 +30,10 @@ Options:
 ";
 
 // TODO: Nice features:
-// Fix panic! on error: print to stderr and exit with 1
-// How many hours have I worked today?
-// How many hours left today?
 // How many hours have i Worked this week?
-// How many hours left his week?
-// Remaing hours / remaiing days (avg)
-// Parse duration and time more leniently, e.g. "6:30" or ";35"
-// Close to optimal schedule?
-// Given some constraints, how should I plan my week?
-// e.g. end 16.15 tuesday and thursday. Start 9.15 mon/wed.
-// End at 15 friday. Wednesaday, end at 17.30
+// Remaing hours / remaining days (avg)
+// Close to optimal schedule? Store optimal schedule in str/file (maybe .timelog/.schedule.txt?)
+// (calculate by hand) and then print stats on how close I am.
 
 #[derive(Debug, Deserialize)]
 struct Args {
