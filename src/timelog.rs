@@ -21,14 +21,19 @@ use chrono::prelude::*;
 
 pub fn parse_duration(string: &str) -> Result<Duration, String> {
     let s = string.trim();
-    // TODO: Handle these formats
-    // if ";" is ommitted => always minute
-    // 3;3 => 3 hrs, 3 min. Handle non zero-padded durations
+    let m: i64;
+    let mut h: i64 = 0;
+    if s.contains(";") {
+        let dur: Vec<&str> = s.split(';').map(|x| x.trim()).collect();
+        h = dur[0].parse().unwrap_or(0);
+        m = dur[1].parse().unwrap_or(0);
+    } else {
+        m = s.parse().unwrap();
+    }
 
-    let dur: Vec<&str> = s.split(';').map(|x| x.trim()).collect();
-    let h: i64 = dur[0].parse().unwrap();
-    let m: i64 = dur[1].parse().unwrap();
-
+    if m == 0 && h == 0 {
+        return Err(format!("Incorrect duration format: {}", s));
+    }
     return Ok(Duration::minutes(h * 60 + m));
 }
 
@@ -409,5 +414,20 @@ use chrono::Duration;
         assert!(fri.is_workday());
         assert!(!sun.is_workday());
         assert!(!sat.is_workday());
+    }
+
+    #[test]
+    fn parse_duration_input() {
+        assert_eq!(super::parse_duration("00;30"), Ok(Duration::minutes(30)));
+        assert_eq!(super::parse_duration("0;30"), Ok(Duration::minutes(30)));
+        assert_eq!(super::parse_duration("0;3"), Ok(Duration::minutes(3)));
+        assert_eq!(super::parse_duration("1;3"), Ok(Duration::minutes(60 + 3)));
+        assert_eq!(super::parse_duration("1;03"), Ok(Duration::minutes(60 + 3)));
+
+        assert_eq!(super::parse_duration("30"), Ok(Duration::minutes(30)));
+        assert_eq!(super::parse_duration("120"), Ok(Duration::minutes(120)));
+
+        assert_eq!(super::parse_duration(";30"), Ok(Duration::minutes(30)));
+        assert_eq!(super::parse_duration(";120"), Ok(Duration::minutes(120)));
     }
 }
