@@ -315,6 +315,8 @@ impl TimeLogger {
     }
 
     pub fn time_left_this_week(&self) -> Duration {
+    // TODO: If start is logged today, we should add Local::now() - today.start to the amount of
+    // time worked.
         return self.tl_month.compute_time_left_in_week_of(Local::today().naive_local());
     }
 
