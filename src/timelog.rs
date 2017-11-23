@@ -346,6 +346,10 @@ impl TimeLogger {
         self.tl_month.days[Local::today().day0() as usize].start
     }
 
+    pub fn todays_end(&self) -> Option<NaiveTime> {
+        self.tl_month.days[Local::today().day0() as usize].end
+    }
+
     pub fn todays_break(&self) -> Duration {
         self.tl_month.days[Local::today().day0() as usize].acc_break
     }
@@ -371,4 +375,39 @@ impl TimeLogger {
     }
 }
 
-// TODO Unit tests? - Maybe not necessary but good practice though
+#[cfg(test)]
+mod tests {
+use super::*;
+use chrono::NaiveTime;
+use chrono::Duration;
+    #[test]
+    fn time_log_day_basic() {
+        let mut day = TimeLogDay::new(NaiveDate::from_ymd(2016, 1, 1));
+        let start_time = NaiveTime::from_hms(11, 30, 0);
+        day.set_start(start_time);
+        assert_eq!(day.start, Some(start_time));
+        let end_time = NaiveTime::from_hms(12, 30, 0);
+        day.set_end(end_time);
+        assert_eq!(day.end, Some(end_time));
+        let dur1 = Duration::seconds(60);;
+        let dur2 = Duration::minutes(31);;
+        day.add_break(dur1);
+        day.add_break(dur2);
+        assert_eq!(day.acc_break, Duration::minutes(32));
+        assert_eq!(day.acc_break, Duration::seconds(32 * 60));
+        let mon = TimeLogDay::new(NaiveDate::from_ymd(2017, 11, 20));
+        let tue = TimeLogDay::new(NaiveDate::from_ymd(2017, 11, 21));
+        let wed = TimeLogDay::new(NaiveDate::from_ymd(2017, 11, 22));
+        let thu = TimeLogDay::new(NaiveDate::from_ymd(2017, 11, 23));
+        let fri = TimeLogDay::new(NaiveDate::from_ymd(2017, 11, 24));
+        let sat = TimeLogDay::new(NaiveDate::from_ymd(2017, 11, 25));
+        let sun = TimeLogDay::new(NaiveDate::from_ymd(2017, 11, 26));
+        assert!(mon.is_workday());
+        assert!(tue.is_workday());
+        assert!(wed.is_workday());
+        assert!(thu.is_workday());
+        assert!(fri.is_workday());
+        assert!(!sun.is_workday());
+        assert!(!sat.is_workday());
+    }
+}

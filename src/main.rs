@@ -122,7 +122,11 @@ fn real_main() -> i32 {
                 return 1;
             }
         };
-        let diff = Local::now().time().signed_duration_since(start) - tl.todays_break();
+        let end = match tl.todays_end() {
+            Some(x) => x,
+            None => Local::now().time(),
+        };
+        let diff = end.signed_duration_since(start) - tl.todays_break();
         let hours = diff.num_hours();
         let extra_minutes = diff.num_minutes() % 60;
         println!("{};{} worked today", hours, extra_minutes);
