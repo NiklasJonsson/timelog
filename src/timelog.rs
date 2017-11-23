@@ -1,5 +1,4 @@
 extern crate chrono;
-extern crate regex;
 
 use std::path::PathBuf;
 use std::path::Path;
@@ -10,6 +9,7 @@ use std;
 use std::fs;
 use std::fmt;
 use std::io;
+use std::error::Error;
 use std::fmt::Display;
 use std::fmt::Formatter;
 use std::str::FromStr;
@@ -19,16 +19,41 @@ use chrono::Duration;
 use chrono::Weekday;
 use chrono::prelude::*;
 
+#[derive(Debug)]
+pub enum TimeLogError {
+    ParseError(String),
+    TimeError(String),
+    IOError(String),
+}
+
+impl Display for TimeLogError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.write_str(self.description())
+    }
+}
+
+
+impl Error for TimeLogError {
+    fn description(&self) -> &str {
+        match self {
+            &TimeLogError::ParseError(_) => "Parse error",
+            &TimeLogError::TimeError(_) => "Error during time object construction",
+            &TimeLogError::IOError(_) => "Error during IO",
+        }
+    }
+}
+
 pub fn parse_duration(string: &str) -> Result<Duration, String> {
     let s = string.trim();
     let m: i64;
-    let mut h: i64 = 0;
+    let h: i64;
     if s.contains(";") {
         let dur: Vec<&str> = s.split(';').map(|x| x.trim()).collect();
         h = dur[0].parse().unwrap_or(0);
         m = dur[1].parse().unwrap_or(0);
     } else {
         m = s.parse().unwrap();
+        h = 0;
     }
 
     if m == 0 && h == 0 {
@@ -117,6 +142,10 @@ impl FromStr for TimeLogDay {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let lines: Vec<&str> = s.lines().collect();
+        if lines.len() != 4 {
+            panic!("Not implemented");
+        }
+
         let date = NaiveDate::parse_from_str(lines[0].trim(), TIMELOGDAY_NAIVEDATE_FORMAT_STRING!())?;
 
         let start = try_get_naivetime(lines[1].split(' ').nth(1).unwrap().trim());
@@ -386,7 +415,7 @@ use super::*;
 use chrono::NaiveTime;
 use chrono::Duration;
     #[test]
-    fn time_log_day_basic() {
+    fn timelogday_basic_mutators() {
         let mut day = TimeLogDay::new(NaiveDate::from_ymd(2016, 1, 1));
         let start_time = NaiveTime::from_hms(11, 30, 0);
         day.set_start(start_time);
@@ -400,6 +429,10 @@ use chrono::Duration;
         day.add_break(dur2);
         assert_eq!(day.acc_break, Duration::minutes(32));
         assert_eq!(day.acc_break, Duration::seconds(32 * 60));
+    }
+
+    #[test]
+    fn timelogday_is_workday() {
         let mon = TimeLogDay::new(NaiveDate::from_ymd(2017, 11, 20));
         let tue = TimeLogDay::new(NaiveDate::from_ymd(2017, 11, 21));
         let wed = TimeLogDay::new(NaiveDate::from_ymd(2017, 11, 22));
@@ -417,6 +450,10 @@ use chrono::Duration;
     }
 
     #[test]
+    fn timelogday_from_str() {
+    }
+
+    #[test]
     fn parse_duration_input() {
         assert_eq!(super::parse_duration("00;30"), Ok(Duration::minutes(30)));
         assert_eq!(super::parse_duration("0;30"), Ok(Duration::minutes(30)));
@@ -430,4 +467,5 @@ use chrono::Duration;
         assert_eq!(super::parse_duration(";30"), Ok(Duration::minutes(30)));
         assert_eq!(super::parse_duration(";120"), Ok(Duration::minutes(120)));
     }
+
 }
