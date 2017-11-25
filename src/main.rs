@@ -11,6 +11,8 @@ use chrono::NaiveTime;
 use chrono::Duration;
 use chrono::ParseResult;
 use timelog::TimeLogger;
+use timelog::TimeLogResult;
+use timelog::TimeLogError;
 
 const USAGE: &'static str = "
 Timelog
@@ -61,10 +63,10 @@ fn get_time(s: Option<String>) -> ParseResult<NaiveTime> {
     }
 }
 
-fn get_duration(s: Option<String>) -> Result<Duration, String> {
+fn get_duration(s: Option<String>) ->  TimeLogResult<Duration> {
     match s {
-        Some(x) => timelog::parse_duration(&x),
-        None => Err(String::from("None value can't be parsed")),
+        None => Err(TimeLogError::InvalidInputError(String::from("Can't parse None value"))),
+        Some(x) => timelog::parse_duration(x.as_str()),
     }
 }
 
@@ -76,7 +78,8 @@ fn real_main() -> i32 {
     let mut tl = match TimeLogger::current_month() {
       Ok(x) => x,
       Err(e) => {
-        panic!("ERROR: Could not create Timelogger instance: {}", e);
+        println!("ERROR: Could not create Timelogger instance: {}", e);
+        return 1;
       }
     };
 

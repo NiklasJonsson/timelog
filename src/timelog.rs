@@ -19,31 +19,74 @@ use chrono::Duration;
 use chrono::Weekday;
 use chrono::prelude::*;
 
+pub type TimeLogResult<T> = std::result::Result<T, TimeLogError>;
+
 #[derive(Debug)]
 pub enum TimeLogError {
     ParseError(String),
-    TimeError(String),
-    IOError(String),
+    TimeError(chrono::ParseError),
+    InvalidInputError(String),
+    IOError(io::Error),
+}
+
+impl TimeLogError {
+    // TODO: Return TimeLogResult?
+	fn parse_error(s: &str) -> TimeLogError {
+        TimeLogError::ParseError(String::from(s))
+    }
+
+    fn io_error_extra_msg(e: &io::Error, msg: &str) -> TimeLogError {
+        TimeLogError::IOError(std::io::Error::new(e.kind(), msg))
+    }
+
+    fn other_io(msg: &str) -> TimeLogError {
+        TimeLogError::IOError(std::io::Error::new(io::ErrorKind::Other, msg))
+    }
+
 }
 
 impl Display for TimeLogError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.write_str(self.description())
+        match *self {
+            TimeLogError::ParseError(ref s) => write!(f, "Parse error: {}", s),
+            TimeLogError::IOError(ref err) => write!(f, "IO error: {}", err),
+            TimeLogError::TimeError(ref err) => write!(f, "Time error: {}", err),
+            TimeLogError::InvalidInputError(ref s) => write!(f, "Invalid input: {}", s),
+        }
     }
 }
 
 
 impl Error for TimeLogError {
     fn description(&self) -> &str {
-        match self {
-            &TimeLogError::ParseError(_) => "Parse error",
-            &TimeLogError::TimeError(_) => "Error during time object construction",
-            &TimeLogError::IOError(_) => "Error during IO",
+        match *self {
+            TimeLogError::ParseError(ref s) => s.as_str(),
+            TimeLogError::IOError(ref err) => err.description(),
+            TimeLogError::TimeError(ref err) => err.description(),
+            TimeLogError::InvalidInputError(ref s) => s.as_str(),
         }
     }
 }
 
-pub fn parse_duration(string: &str) -> Result<Duration, String> {
+impl From<chrono::ParseError> for TimeLogError {
+    fn from(err: chrono::ParseError) -> TimeLogError {
+        TimeLogError::TimeError(err)
+    }
+}
+
+impl From<io::Error> for TimeLogError {
+    fn from(err: io::Error) -> TimeLogError {
+        TimeLogError::IOError(err)
+    }
+}
+
+impl From<std::num::ParseIntError> for TimeLogError {
+    fn from(err: std::num::ParseIntError) -> TimeLogError {
+        TimeLogError::ParseError(format!("{}", err))
+    }
+}
+
+pub fn parse_duration(string: &str) -> TimeLogResult<Duration> {
     let s = string.trim();
     let m: i64;
     let h: i64;
@@ -52,12 +95,12 @@ pub fn parse_duration(string: &str) -> Result<Duration, String> {
         h = dur[0].parse().unwrap_or(0);
         m = dur[1].parse().unwrap_or(0);
     } else {
-        m = s.parse().unwrap();
+        m = s.parse()?;
         h = 0;
     }
 
     if m == 0 && h == 0 {
-        return Err(format!("Incorrect duration format: {}", s));
+        return Err(TimeLogError::ParseError(String::from("Invalid format for duration")));
     }
     return Ok(Duration::minutes(h * 60 + m));
 }
@@ -138,7 +181,7 @@ macro_rules! end_format_str {
  *   Accumulated break: <Duration>
  */
 impl FromStr for TimeLogDay {
-    type Err = chrono::ParseError;
+    type Err = TimeLogError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let lines: Vec<&str> = s.lines().collect();
@@ -147,10 +190,21 @@ impl FromStr for TimeLogDay {
         }
 
         let date = NaiveDate::parse_from_str(lines[0].trim(), TIMELOGDAY_NAIVEDATE_FORMAT_STRING!())?;
+        // TODO: Refactor split,nth etc to it's own function to not repeat the same code
+        // e.g. extract(line: str, whitespace_idx, error_msg)
 
-        let start = try_get_naivetime(lines[1].split(' ').nth(1).unwrap().trim());
-        let end = try_get_naivetime(lines[2].split(' ').nth(1).unwrap().trim());
-        let acc_br = parse_duration(lines[3].split(' ').nth(2).unwrap().trim()).unwrap();
+        let start = try_get_naivetime(lines[1].split(' ')
+                                      .nth(1)
+                                      .ok_or(TimeLogError::parse_error("Invalid format, can't parse start time"))?
+                                      .trim());
+        let end = try_get_naivetime(lines[2].split(' ')
+                                    .nth(1)
+                                    .ok_or(TimeLogError::parse_error("Invalid format, can't parse end time"))?
+                                    .trim());
+        let acc_br = parse_duration(lines[3].split(' ')
+                                    .nth(2)
+                                    .ok_or(TimeLogError::parse_error("Invalid format, can't parse accumulated break"))?
+                                    .trim())?;
         return Ok(TimeLogDay{start: start, end:end, acc_break: acc_br, date: date});
     }
 }
@@ -213,6 +267,7 @@ impl TimeLogMonth {
     }
 
     fn compute_time_worked_between(&self, day1_idx: usize, day2_idx: usize) -> Duration {
+        // TODO: Remove unwrap()?
         self.days[day1_idx..day2_idx].iter().fold(Duration::zero(), |acc, day| {
             if day.start.is_some() && day.end.is_some() {
                 debug_assert!(day.end > day.start, "End of workday has to be after start");
@@ -261,7 +316,7 @@ impl TimeLogMonth {
 }
 
 impl FromStr for TimeLogMonth {
-    type Err = String;
+    type Err = TimeLogError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let mut days: Vec<TimeLogDay> = Vec::with_capacity(MAX_DAYS_IN_MONTH);
@@ -277,7 +332,7 @@ impl FromStr for TimeLogMonth {
         });
 
         for day in days_it {
-            days.push(TimeLogDay::from_str(day.as_str()).unwrap());
+            days.push(TimeLogDay::from_str(day.as_str())?);
         }
 
         Ok(TimeLogMonth{n_days: MONTH_2_NDAYS[days[0].date.month0() as usize], days: days})
@@ -302,7 +357,7 @@ pub struct TimeLogger {
 const TIMELOGGER_FOLDER: &str = ".timelog";
 impl TimeLogger {
 
-    pub fn current_month() -> Result<Self, io::Error> {
+    pub fn current_month() -> TimeLogResult<Self> {
         /* Directory structure is:
          * $HOME/.timelog/
          *   2017/
@@ -311,7 +366,7 @@ impl TimeLogger {
          *   2018/
          */
         let today = Local::today();
-        let mut path_buf = std::env::home_dir().unwrap();
+        let mut path_buf = std::env::home_dir().ok_or(TimeLogError::other_io("Can't find home dir"))?;
 
         // .timelog
         path_buf.push(TIMELOGGER_FOLDER);
@@ -341,9 +396,9 @@ impl TimeLogger {
         let mut contents = String::new();
         buf_reader.read_to_string(&mut contents)?;
         let tlm: TimeLogMonth = match contents.parse() {
-          Ok(x) => x,
-          Err(e) => return Err(io::Error::new(io::ErrorKind::InvalidData, format!("Unable to parse logfile: {}", e).as_str())),
-        };
+          Ok(x) => Ok(x),
+          Err(e) => Err(io::Error::new(io::ErrorKind::InvalidData, format!("Unable to parse logfile: {}", e).as_str())),
+        }?;
 
         Ok(TimeLogger{tl_month: tlm, file_path: path_buf})
     }
@@ -388,7 +443,7 @@ impl TimeLogger {
         self.tl_month.days[Local::today().day0() as usize].acc_break
     }
 
-    pub fn save(&self) -> Result<(), std::io::Error> {
+    pub fn save(&self) -> TimeLogResult<()> {
         let mut bkp = self.file_path.clone();
         bkp.set_extension("tl.bkp");
         let bkp_fp = bkp.as_path();
@@ -399,11 +454,11 @@ impl TimeLogger {
         fs::copy(fp, bkp_fp)?;
         match file.write_all(s.as_str().as_bytes()) {
             Ok(_) => fs::remove_file(bkp_fp)?,
-            Err(e) => {
+            Err(ref e) => {
                 fs::copy(bkp_fp, fp)?;
-                return Err(io::Error::new(e.kind(), format!("Failed to write to file (restoring backup): {}", e).as_str()));
+                return Err(TimeLogError::io_error_extra_msg(e, format!("Failed to write to file (restoring backup): {}", e).as_str()));
             },
-        };
+        }
 
         Ok(())
     }
