@@ -99,9 +99,6 @@ pub fn parse_duration(string: &str) -> TimeLogResult<Duration> {
         h = 0;
     }
 
-    if m == 0 && h == 0 {
-        return Err(TimeLogError::ParseError(String::from("Invalid format for duration")));
-    }
     return Ok(Duration::minutes(h * 60 + m));
 }
 
