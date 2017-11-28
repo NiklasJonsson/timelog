@@ -70,7 +70,6 @@ impl Display for TimeLogError {
     }
 }
 
-
 impl Error for TimeLogError {
     fn description(&self) -> &str {
         match *self {
@@ -191,6 +190,7 @@ macro_rules! end_format_str {
  *   End: <NaiveTime>
  *   Accumulated break: <Duration>
  */
+
 impl FromStr for TimeLogDay {
     type Err = TimeLogError;
 
@@ -201,9 +201,6 @@ impl FromStr for TimeLogDay {
         }
 
         let date = NaiveDate::parse_from_str(lines[0].trim(), TIMELOGDAY_NAIVEDATE_FORMAT_STRING!())?;
-        // TODO: Refactor split,nth etc to it's own function to not repeat the same code
-        // e.g. extract(line: str, whitespace_idx, error_msg)
-
         let start = try_get_naivetime(lines[1].split(' ')
                                       .nth(1)
                                       .ok_or(TimeLogError::parse_error("Invalid format, can't parse start time"))?
@@ -240,7 +237,6 @@ impl Display for TimeLogDay {
     }
 }
 
-// TODO: Create custom Error type
 struct TimeLogMonth {
     n_days: usize,
     days: Vec<TimeLogDay>,
@@ -278,13 +274,14 @@ impl TimeLogMonth {
     }
 
     fn compute_time_worked_between(&self, day1_idx: usize, day2_idx: usize) -> Duration {
-        // TODO: Remove unwrap()?
         self.days[day1_idx..day2_idx].iter().fold(Duration::zero(), |acc, day| {
-            if day.start.is_some() && day.end.is_some() {
-                debug_assert!(day.end > day.start, "End of workday has to be after start");
-                return acc + day.end.unwrap().signed_duration_since(day.start.unwrap()) - day.acc_break;
-            }
-            return acc;
+            match (day.start, day.end) {
+                (Some(start), Some(end)) => {
+                    debug_assert!(end > start, "End of workday has to be after start");
+                    return acc + end.signed_duration_since(start) - day.acc_break;
+                },
+                (_, _) => return acc,
+            };
         })
     }
 
@@ -414,10 +411,32 @@ impl TimeLogger {
         Ok(TimeLogger{tl_month: tlm, file_path: path_buf})
     }
 
+    fn time_worked_today_with(&self, end: NaiveTime) -> TimeLogResult<Duration> {
+        let start = match self.todays_start() {
+            Some(x) => x,
+            None => return Err(InvalidInputError(String::from("No start value set today"))),
+        };
+        Ok(end.signed_duration_since(start) - self.todays_break())
+    }
+
+    pub fn time_worked_today(&self) -> TimeLogResult<Duration> {
+        let end = match self.todays_end() {
+            Some(x) => x,
+            None => Local::now().time(),
+        };
+		self.time_worked_today_with(end)
+    }
+
     pub fn time_left_this_week(&self) -> Duration {
-    // TODO: If start is logged today, we should add Local::now() - today.start to the amount of
-    // time worked.
-        return self.tl_month.compute_time_left_in_week_of(Local::today().naive_local());
+        let now = Local::now();
+        self.tl_month.compute_time_left_in_week_of(now.naive_local().date())
+            - match self.todays_end() {
+                Some(_) => Duration::seconds(0), // We have already add this
+                None => match self.time_worked_today_with(Local::now().time()) {
+                    Ok(dur) => dur,
+                    Err(_) => Duration::seconds(0), // No start time set for today, ignore
+                }
+            }
     }
 
     pub fn hours_left_this_month(&self) -> u32 {
@@ -442,15 +461,15 @@ impl TimeLogger {
         self.tl_month.days[Local::now().day0() as usize].add_break(dur);
     }
 
-    pub fn todays_start(&self) -> Option<NaiveTime> {
+    fn todays_start(&self) -> Option<NaiveTime> {
         self.tl_month.days[Local::today().day0() as usize].start
     }
 
-    pub fn todays_end(&self) -> Option<NaiveTime> {
+    fn todays_end(&self) -> Option<NaiveTime> {
         self.tl_month.days[Local::today().day0() as usize].end
     }
 
-    pub fn todays_break(&self) -> Duration {
+    fn todays_break(&self) -> Duration {
         self.tl_month.days[Local::today().day0() as usize].acc_break
     }
 

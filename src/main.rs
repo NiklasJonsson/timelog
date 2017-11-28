@@ -118,18 +118,13 @@ fn real_main() -> i32 {
         let time = tl.time_left_this_week();
         println!("{};{} left this week", time.num_hours(), time.num_minutes() % 60);
     } else if args.cmd_day {
-        let start = match tl.todays_start() {
-            Some(x) => x,
-            None => {
-                println!("Todays start time is not set");
+        let diff = match tl.time_worked_today() {
+            Ok(x) => x,
+            Err(e) => {
+                println!("Couldn't calculate time worked today: {}", e);
                 return 1;
-            }
+            },
         };
-        let end = match tl.todays_end() {
-            Some(x) => x,
-            None => Local::now().time(),
-        };
-        let diff = end.signed_duration_since(start) - tl.todays_break();
         let hours = diff.num_hours();
         let extra_minutes = diff.num_minutes() % 60;
         println!("{};{} worked today", hours, extra_minutes);
