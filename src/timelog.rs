@@ -19,6 +19,8 @@ use chrono::Duration;
 use chrono::Weekday;
 use chrono::prelude::*;
 
+use TimeLogError::{ParseError, TimeError, InvalidInputError, IOError};
+
 pub type TimeLogResult<T> = std::result::Result<T, TimeLogError>;
 
 #[derive(Debug)]
@@ -27,6 +29,18 @@ pub enum TimeLogError {
     TimeError(chrono::ParseError),
     InvalidInputError(String),
     IOError(io::Error),
+}
+
+impl PartialEq for TimeLogError {
+    fn eq(&self, other: &TimeLogError) -> bool {
+        match (self, other) {
+            (&ParseError(_), &ParseError(_)) => true,
+            (&TimeError(_), &TimeError(_)) => true,
+            (&InvalidInputError(_), &InvalidInputError(_)) => true,
+            (&IOError(_), &IOError(_)) => true,
+            _ => false,
+        }
+    }
 }
 
 impl TimeLogError {
@@ -503,6 +517,44 @@ use chrono::Duration;
 
     #[test]
     fn timelogday_from_str() {
+        let all_undef = "01/11/2017 Wednesday\nStart: UNDEF\nEnd: UNDEF\nAccumulated break: 00;00";
+
+        let day: TimeLogDay = all_undef.parse().unwrap();
+        assert_eq!(day.start, None);
+        assert_eq!(day.end, None);
+        assert_eq!(day.acc_break, Duration::seconds(0));
+        assert_eq!(day.date.day(), 1);
+        assert_eq!(day.date.month(), 11);
+        assert_eq!(day.date.year(), 2017);
+        assert_eq!(day.date.weekday(), Weekday::Wed);
+
+        let start = "02/11/2017 Thursday\nStart: 07:31:00\nEnd: UNDEF\nAccumulated break: 00;00";
+        let start_day: TimeLogDay = start.parse().unwrap();
+        assert_eq!(start_day.start, Some(NaiveTime::from_hms(7, 31, 0)));
+        assert_eq!(start_day.end, None);
+        assert_eq!(start_day.acc_break, Duration::seconds(0));
+        assert_eq!(start_day.date.day(), 2);
+        assert_eq!(start_day.date.month(), 11);
+        assert_eq!(start_day.date.year(), 2017);
+        assert_eq!(start_day.date.weekday(), Weekday::Thu);
+
+        let start_end = "02/11/2017 Thursday\nStart: 07:31:00\nEnd: 12:00:00\nAccumulated break: 00;00";
+        let start_end_day: TimeLogDay = start_end.parse().unwrap();
+        assert_eq!(start_end_day.start, Some(NaiveTime::from_hms(7, 31, 0)));
+        assert_eq!(start_end_day.end, Some(NaiveTime::from_hms(12, 0, 0)));
+        assert_eq!(start_end_day.acc_break, Duration::seconds(0));
+
+        let s_e_break = "02/11/2017 Thursday\nStart: 07:31:00\nEnd: 12:00:00\nAccumulated break: 00;35";
+        let mut start_end_day: TimeLogDay = s_e_break.parse().unwrap();
+        assert_eq!(start_end_day.start, Some(NaiveTime::from_hms(7, 31, 0)));
+        assert_eq!(start_end_day.end, Some(NaiveTime::from_hms(12, 0, 0)));
+        assert_eq!(start_end_day.acc_break, Duration::seconds(35 * 60));
+
+        start_end_day.add_break(Duration::minutes(21));
+        assert_eq!(start_end_day.acc_break, Duration::minutes(35 + 21));
+
+        start_end_day.add_break(Duration::minutes(13));
+        assert_eq!(start_end_day.acc_break, Duration::minutes(35 + 21 + 13));
     }
 
     #[test]
