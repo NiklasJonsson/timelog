@@ -159,7 +159,7 @@ impl TimeLogDay {
     }
 
     fn is_workday(&self) -> bool {
-        return self.date.weekday() != Weekday::Sat && self.date.weekday() != Weekday::Sun;
+        self.date.weekday() != Weekday::Sat && self.date.weekday() != Weekday::Sun
     }
 }
 
@@ -167,10 +167,7 @@ fn try_get_naivetime(s: &str) -> Option<NaiveTime> {
     if s.contains("UNDEF") {
         return None;
     } else {
-        return match NaiveTime::from_str(s) {
-            Err(_) => None,
-            Ok(x) => Some(x),
-        };
+        return NaiveTime::from_str(s).ok();
     }
 }
 
@@ -286,12 +283,11 @@ impl TimeLogMonth {
     }
 
     fn compute_workable_time_between(&self, first_day_idx: usize, last_day_idx: usize) -> Duration {
-        self.days[first_day_idx..last_day_idx].iter().fold(Duration::seconds(0), |acc, day| {
-            if day.is_workday() {
-                return acc + Duration::hours(8);
-            }
-            return acc;
-        })
+        let n_work_days = self.days[first_day_idx..last_day_idx]
+            .iter()
+            .filter(|x| x.is_workday())
+            .count();
+        Duration::hours(n_work_days as i64 * 8)
     }
 
     fn compute_time_worked(&self) -> Duration {
@@ -420,22 +416,16 @@ impl TimeLogger {
     }
 
     pub fn time_worked_today(&self) -> TimeLogResult<Duration> {
-        let end = match self.todays_end() {
-            Some(x) => x,
-            None => Local::now().time(),
-        };
-		self.time_worked_today_with(end)
+        let end = self.todays_end().unwrap_or(Local::now().time());
+        self.time_worked_today_with(end)
     }
 
     pub fn time_left_this_week(&self) -> Duration {
         let now = Local::now();
         self.tl_month.compute_time_left_in_week_of(now.naive_local().date())
             - match self.todays_end() {
-                Some(_) => Duration::seconds(0), // We have already add this
-                None => match self.time_worked_today_with(Local::now().time()) {
-                    Ok(dur) => dur,
-                    Err(_) => Duration::seconds(0), // No start time set for today, ignore
-                }
+                Some(_) => Duration::seconds(0), // We have already added this
+                None => self.time_worked_today_with(Local::now().time()).unwrap_or(Duration::seconds(0)),
             }
     }
 

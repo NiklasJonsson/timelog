@@ -36,6 +36,15 @@ Options:
 // Remaing hours / remaining days (avg)
 // Close to optimal schedule? Store optimal schedule in str/file (maybe .timelog/.schedule.txt?)
 // (calculate by hand) and then print stats on how close I am.
+// TODO: Flex time:
+// Carry from previous week! But how?
+// If we compute it each time, we have to look through all files for all years!
+// Encode carry flex time each week, saved after each friday? If so, we read it and 
+// either remove it from worked hours or add it to workable hours.
+// TimeLogMonth keeps track of intra-month flex
+// TimeLogger keeps track of inter-month flex => Need to add capabilities to read from
+// several files at once
+// Set to zero when < 1 minute?
 
 #[derive(Debug, Deserialize)]
 struct Args {
@@ -53,7 +62,7 @@ fn parse_time_arg(s: &String) -> ParseResult<NaiveTime> {
     // %R = %H:%M
     // %H: hour, two digits
     // %M: minute, two digits
-    NaiveTime::parse_from_str(s, "%R")
+    NaiveTime::parse_from_str(s, "%R").or(NaiveTime::parse_from_str(s, "%H.%M"))
 }
 
 fn get_time(s: Option<String>) -> ParseResult<NaiveTime> {
@@ -114,7 +123,6 @@ fn real_main() -> i32 {
         println!("{} hrs left of {} this month", tl.hours_left_this_month(), tl.total_hours_this_month());
     } else if args.cmd_week {
         // TODO: Print if end of week or beginning of week is not the same month
-        // TODO: Read from other file if possible
         let time = tl.time_left_this_week();
         println!("{};{} left this week", time.num_hours(), time.num_minutes() % 60);
     } else if args.cmd_day {
