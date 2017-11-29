@@ -249,7 +249,7 @@ fn get_first_day_in_week_of(date: NaiveDate) -> NaiveDate {
 
 fn get_last_day_in_week_of(date: NaiveDate) -> NaiveDate {
     let mut last_day = date;
-    while last_day.weekday() != Weekday::Fri && last_day.day0() as usize != MONTH_2_NDAYS[date.month0() as usize] {
+    while last_day.weekday() != Weekday::Fri && last_day.succ().month() == date.month() {
         last_day = last_day.succ();
     }
 
@@ -623,5 +623,51 @@ use chrono::Duration;
         assert_eq!(tlm.compute_workable_time_in_week_of(may_1st), Duration::hours(40));
         assert_eq!(tlm.compute_logged_time_in_week_of(may_1st), Duration::hours(4));
         assert_eq!(tlm.compute_logged_time_in_week_of(may_8th), Duration::minutes(11 * 60 + 45 - 35 + 8 * 60));
+    }
+
+    #[test]
+    fn timelogmonth_utility() {
+        let may_1st = NaiveDate::from_ymd(2017, 05, 01);
+        let may_8th = NaiveDate::from_ymd(2017, 05, 08);
+        assert_eq!(get_first_day_in_week_of(may_1st), NaiveDate::from_ymd(2017,05,01));
+        assert_eq!(get_first_day_in_week_of(may_8th), NaiveDate::from_ymd(2017,05,08));
+        assert_eq!(get_last_day_in_week_of(may_1st), NaiveDate::from_ymd(2017,05,05));
+        assert_eq!(get_last_day_in_week_of(may_8th), NaiveDate::from_ymd(2017,05,12));
+
+        let nov_29th = NaiveDate::from_ymd(2017, 11, 29);
+        assert_eq!(get_first_day_in_week_of(nov_29th), NaiveDate::from_ymd(2017,11,27));
+        assert_eq!(get_last_day_in_week_of(nov_29th), NaiveDate::from_ymd(2017,11,30));
+
+        let nov_1st = NaiveDate::from_ymd(2017, 11, 1);
+        assert_eq!(get_first_day_in_week_of(nov_1st), NaiveDate::from_ymd(2017,11,1));
+        assert_eq!(get_last_day_in_week_of(nov_1st), NaiveDate::from_ymd(2017,11,3));
+
+        let nov_3rd = NaiveDate::from_ymd(2017, 11, 3);
+        assert_eq!(get_first_day_in_week_of(nov_3rd), NaiveDate::from_ymd(2017,11,1));
+        assert_eq!(get_last_day_in_week_of(nov_3rd), NaiveDate::from_ymd(2017,11,3));
+    }
+
+    #[test]
+    fn timelogmonth_from_str() {
+        // TODO
+    }
+
+    #[test]
+    fn timelogger_from_to_file() {
+        // TODO: Add functionality and then write tests
+        // Add test file to repo:
+        // timelog/test_input/.timelog...
+        // Make some changes, save to file and then read again
+    }
+
+    #[test]
+    fn timelogger_crossing_month_boundaries() {
+        // TODO: Add functionality and then write tests
+        // Add test file to repo?
+    }
+
+    #[test]
+    fn timelogger_flex_time() {
+        //TODO
     }
 }

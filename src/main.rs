@@ -32,19 +32,19 @@ Options:
 ";
 
 // TODO: Nice features:
-// How many hours have i Worked this week?
+// How many hours have i worked this week?
 // Remaing hours / remaining days (avg)
 // Close to optimal schedule? Store optimal schedule in str/file (maybe .timelog/.schedule.txt?)
 // (calculate by hand) and then print stats on how close I am.
 // TODO: Flex time:
-// Carry from previous week! But how?
-// If we compute it each time, we have to look through all files for all years!
-// Encode carry flex time each week, saved after each friday? If so, we read it and 
+// Encode carry flex time each week, saved after each EndOfWeek? If so, we read it and 
 // either remove it from worked hours or add it to workable hours.
 // TimeLogMonth keeps track of intra-month flex
 // TimeLogger keeps track of inter-month flex => Need to add capabilities to read from
 // several files at once
 // Set to zero when < 1 minute?
+// TODO: Sick/vacation days => encode as ABSENCE, or maybe enum, SICKDAY, UNDEF, VACATION, (VAB,
+// PARLEAVE) and TimeVal? What if worked 4h + 4h sick? Specific case we don't need to care about?
 
 #[derive(Debug, Deserialize)]
 struct Args {
