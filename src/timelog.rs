@@ -44,7 +44,6 @@ impl PartialEq for TimeLogError {
 }
 
 impl TimeLogError {
-    // TODO: Return TimeLogResult?
 	fn parse_error(s: &str) -> TimeLogError {
         TimeLogError::ParseError(String::from(s))
     }
@@ -305,8 +304,8 @@ impl TimeLogMonth {
     }
 
     fn compute_logged_time_in_week_of(&self, date: NaiveDate) -> Duration {
-        let first_day_idx = get_first_day_in_week_of(date).day() as usize;
-        let last_day_idx = get_last_day_in_week_of(date).day() as usize;
+        let first_day_idx = get_first_day_in_week_of(date).day0() as usize;
+        let last_day_idx = get_last_day_in_week_of(date).day0() as usize;
         self.compute_time_worked_between(first_day_idx, last_day_idx + 1)
     }
 
@@ -581,4 +580,48 @@ use chrono::Duration;
         assert_eq!(super::parse_duration(";120"), Ok(Duration::minutes(120)));
     }
 
+    #[test]
+    fn timelogmonth_empty() {
+        let tlm = TimeLogMonth::empty(NaiveDate::from_ymd(2017, 05, 1));
+        assert_eq!(tlm.compute_time_worked(), Duration::seconds(0));
+        assert_eq!(tlm.compute_time_left(), tlm.compute_workable_time());
+        assert_eq!(tlm.compute_time_worked_between(0, 4), Duration::seconds(0));
+        assert_eq!(tlm.compute_workable_time_between(0, 0), Duration::hours(0));
+        for i in 0..6 {
+            assert_eq!(tlm.compute_workable_time_between(0,i), Duration::hours(8 * i as i64));
+        }
+    }
+
+    #[test]
+    fn timelogmonth_basic() {
+        let may_1st = NaiveDate::from_ymd(2017, 05, 01);
+        let may_8th = NaiveDate::from_ymd(2017, 05, 08);
+        let mut tlm = TimeLogMonth::empty(may_1st);
+        tlm.days[0].set_start(NaiveTime::from_hms(8,15,0));
+        assert_eq!(tlm.compute_time_worked(), Duration::seconds(0));
+        tlm.days[0].set_end(NaiveTime::from_hms(10,15,0));
+        assert_eq!(tlm.compute_time_worked(), Duration::hours(2));
+
+        tlm.days[1].set_start(NaiveTime::from_hms(8,15,0));
+        assert_eq!(tlm.compute_time_worked(), Duration::hours(2));
+        tlm.days[1].set_end(NaiveTime::from_hms(10,15,0));
+        assert_eq!(tlm.compute_time_worked(), Duration::hours(4));
+
+        tlm.days[7].set_start(NaiveTime::from_hms(7,15,0));
+        assert_eq!(tlm.compute_time_worked(), Duration::hours(4));
+        tlm.days[7].set_end(NaiveTime::from_hms(19,0,0));
+        assert_eq!(tlm.compute_time_worked(), Duration::minutes(15*60 + 45));
+
+        tlm.days[8].add_break(Duration::minutes(19));
+        assert_eq!(tlm.compute_time_worked(), Duration::minutes(15*60 + 45));
+
+        tlm.days[11].add_break(Duration::minutes(35));
+        tlm.days[11].set_start(NaiveTime::from_hms(8,0,0));
+        tlm.days[11].set_end(NaiveTime::from_hms(16,0,0));
+        assert_eq!(tlm.compute_time_worked(), Duration::minutes(15*60 + 45 + 8 * 60 - 35));
+
+        assert_eq!(tlm.compute_workable_time_in_week_of(may_1st), Duration::hours(40));
+        assert_eq!(tlm.compute_logged_time_in_week_of(may_1st), Duration::hours(4));
+        assert_eq!(tlm.compute_logged_time_in_week_of(may_8th), Duration::minutes(11 * 60 + 45 - 35 + 8 * 60));
+    }
 }
