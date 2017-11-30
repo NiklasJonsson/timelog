@@ -122,7 +122,6 @@ fn real_main() -> i32 {
     } else if args.cmd_month {
         println!("{} hrs left of {} this month", tl.hours_left_this_month(), tl.total_hours_this_month());
     } else if args.cmd_week {
-        // TODO: Print if end of week or beginning of week is not the same month
         let time = tl.time_left_this_week();
         println!("{};{} left this week", time.num_hours(), time.num_minutes() % 60);
     } else if args.cmd_day {
@@ -152,4 +151,19 @@ fn real_main() -> i32 {
 fn main() {
     let ret = real_main();
     std::process::exit(ret);
+}
+
+#[cfg(test)]
+mod main_tests {
+use chrono::NaiveTime;
+use super::*;
+    #[test]
+    fn parse_time() {
+        assert_eq!(parse_time_arg(&String::from("03:00")), Ok(NaiveTime::from_hms(3,0,0)));
+        assert_eq!(parse_time_arg(&String::from("03.00")), Ok(NaiveTime::from_hms(3,0,0)));
+        assert_eq!(parse_time_arg(&String::from("3.00")), Ok(NaiveTime::from_hms(3,0,0)));
+        assert_eq!(parse_time_arg(&String::from("3.0")), Ok(NaiveTime::from_hms(3,0,0)));
+        assert_eq!(parse_time_arg(&String::from("03.0")), Ok(NaiveTime::from_hms(3,0,0)));
+        assert_eq!(parse_time_arg(&String::from("3.00")), Ok(NaiveTime::from_hms(3,0,0)));
+    }
 }

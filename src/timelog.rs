@@ -360,16 +360,14 @@ pub struct TimeLogger {
 const TIMELOGGER_FOLDER: &str = ".timelog";
 impl TimeLogger {
 
-    pub fn current_month() -> TimeLogResult<Self> {
+    fn in_dir(mut path_buf: PathBuf, date: Date<Local>) -> TimeLogResult<Self> {
         /* Directory structure is:
-         * $HOME/.timelog/
+         * <path_buf>/.timelog/
          *   2017/
          *      January.tl
          *      February.tl
          *   2018/
          */
-        let today = Local::today();
-        let mut path_buf = std::env::home_dir().ok_or(TimeLogError::other_io("Can't find home dir"))?;
 
         // .timelog
         path_buf.push(TIMELOGGER_FOLDER);
@@ -378,18 +376,18 @@ impl TimeLogger {
         }
 
         // .timelog/year/
-        path_buf.push(today.format("%Y/").to_string().as_str());
+        path_buf.push(date.format("%Y/").to_string().as_str());
         if !path_buf.as_path().exists() {
             std::fs::create_dir(path_buf.as_path())?;
         }
 
         // .timelog/year/month.tl
-        path_buf.push(today.format("%B").to_string().as_str());
+        path_buf.push(date.format("%B").to_string().as_str());
         path_buf.set_extension("tl");
 
         if !path_buf.as_path().exists() {
             File::create(path_buf.as_path())?;
-            return Ok(TimeLogger{tl_month: TimeLogMonth::empty(NaiveDate::from_ymd(today.year(), today.month(), 1)),
+            return Ok(TimeLogger{tl_month: TimeLogMonth::empty(NaiveDate::from_ymd(date.year(), date.month(), 1)),
                                  file_path: path_buf});
         }
 
@@ -404,6 +402,13 @@ impl TimeLogger {
         }?;
 
         Ok(TimeLogger{tl_month: tlm, file_path: path_buf})
+    }
+
+
+    pub fn current_month() -> TimeLogResult<Self> {
+        let today = Local::today();
+        let path_buf = std::env::home_dir().ok_or(TimeLogError::other_io("Can't find home dir"))?;
+        return TimeLogger::in_dir(path_buf, today);
     }
 
     fn time_worked_today_with(&self, end: NaiveTime) -> TimeLogResult<Duration> {
