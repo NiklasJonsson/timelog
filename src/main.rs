@@ -8,10 +8,8 @@ mod timelog;
 use docopt::Docopt;
 use chrono::prelude::*;
 use chrono::NaiveTime;
-use chrono::Duration;
 use chrono::ParseResult;
 use timelog::TimeLogger;
-use timelog::TimeLogResult;
 use timelog::TimeLogError;
 
 const USAGE: &'static str = "
@@ -20,7 +18,6 @@ Timelog
 Usage:
   timelog start [<time>]
   timelog end [<time>]
-  timelog break [<duration>]
   timelog month
   timelog week
   timelog day
@@ -36,21 +33,13 @@ Options:
 // Remaing hours / remaining days (avg)
 // Close to optimal schedule? Store optimal schedule in str/file (maybe .timelog/.schedule.txt?)
 // (calculate by hand) and then print stats on how close I am.
-// TODO: Flex time:
-// Encode carry flex time each week, saved after each EndOfWeek? If so, we read it and 
-// either remove it from worked hours or add it to workable hours.
-// TimeLogMonth keeps track of intra-month flex
-// TimeLogger keeps track of inter-month flex => Need to add capabilities to read from
-// several files at once
-// Set to zero when < 1 minute?
-// TODO: Sick/vacation days => encode as ABSENCE, or maybe enum, SICKDAY, UNDEF, VACATION, (VAB,
-// PARLEAVE) and TimeVal? What if worked 4h + 4h sick? Specific case we don't need to care about?
+// TODO: timelog break <dur> [<time>] which would end the previous segment, and start new
+// with dur in between.
 
 #[derive(Debug, Deserialize)]
 struct Args {
 	cmd_start: bool,
 	cmd_end: bool,
-	cmd_break: bool,
     cmd_month: bool,
     cmd_week: bool,
     cmd_day: bool,
@@ -72,19 +61,12 @@ fn get_time(s: Option<String>) -> ParseResult<NaiveTime> {
     }
 }
 
-fn get_duration(s: Option<String>) ->  TimeLogResult<Duration> {
-    match s {
-        None => Err(TimeLogError::InvalidInputError(String::from("Can't parse None value"))),
-        Some(x) => timelog::parse_duration(x.as_str()),
-    }
-}
-
 fn real_main() -> i32 {
 	let args: Args = Docopt::new(USAGE)
 		.and_then(|d| d.deserialize())
 		.unwrap_or_else(|e| e.exit());
 
-    let mut tl = match TimeLogger::current_month() {
+    let mut tl = match TimeLogger::default() {
       Ok(x) => x,
       Err(e) => {
         println!("ERROR: Could not create Timelogger instance: {}", e);
@@ -100,7 +82,7 @@ fn real_main() -> i32 {
                 return 1;
             },
         };
-        tl.log_start(time);
+        tl.log_start(Local::today().naive_local(), time);
     } else if args.cmd_end {
         let time = match get_time(args.arg_time) {
             Ok(t) => t,
@@ -109,16 +91,7 @@ fn real_main() -> i32 {
                 return 1;
             },
         };
-        tl.log_end(time);
-    } else if args.cmd_break {
-        let dur = match get_duration(args.arg_duration) {
-            Ok(d) => d,
-            Err(e) => {
-                println!("Unable to update timelog: {}", e);
-                return 1;
-            },
-        };
-        tl.log_break(dur);
+        tl.log_end(Local::today().naive_local(), time);
     } else if args.cmd_month {
         println!("{} hrs left of {} this month", tl.hours_left_this_month(), tl.total_hours_this_month());
     } else if args.cmd_week {
