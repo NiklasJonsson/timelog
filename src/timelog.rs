@@ -189,12 +189,7 @@ impl PartialOrd for TimeLogEntry {
     }
 }
 
-
 impl TimeLogEntry {
-    fn new(date: NaiveDate, entry_type: TimeLogEntryType) -> Self {
-        TimeLogEntry{date: date, entry_type: entry_type, start: None, end: None}
-    }
-
     fn start(date: NaiveDate, entry_type: TimeLogEntryType, time: NaiveTime) -> Self {
         TimeLogEntry{date: date, entry_type: entry_type, start: Some(time), end: None}
     }
@@ -212,7 +207,6 @@ impl TimeLogEntry {
         debug_assert!(time.nanosecond() == 0);
         self.end = Some(time);
     }
-
 }
 
 fn try_get_naivetime(s: &str) -> Option<NaiveTime> {
@@ -287,7 +281,6 @@ impl Display for TimeLogEntry {
 
 #[derive(Debug, PartialEq)]
 struct TimeLogDay {
-    // TODO: Print warnings if UNDEF is present on days that have already passed
     date: NaiveDate,
     entries: Vec<TimeLogEntry>,
 }
@@ -326,11 +319,6 @@ fn is_weekday(date: NaiveDate) -> bool {
 }
 
 impl TimeLogDay {
-    fn is_weekday(&self) -> bool {
-        is_weekday(self.date)
-    }
-
-    #[cfg(debug_assertions)]
     fn validate_ordering(&self) -> bool {
         for i in 0..self.entries.len() {
             for j in (i + 1)..self.entries.len() {
@@ -361,11 +349,9 @@ impl TimeLogDay {
         TimeLogDay{date: date, entries: Vec::new()}
     }
 
-    // TODO: Remove TimeLogEntry::?
     gen_set!(set_end, end, set_end, TimeLogEntry::end);
     gen_set!(set_start, start, set_start, TimeLogEntry::start);
 
-    // TODO: Macro for these
     fn get_start(&self, etype: TimeLogEntryType) -> Option<NaiveTime> {
         debug_assert!(self.validate_ordering());
         for e in &self.entries {
@@ -597,6 +583,7 @@ impl TimeLogger {
         dates.sort();
         for date in dates {
             s.push_str(self.date2logday[date].to_string().as_str());
+            s.push('\n');
         }
 
         return s;
@@ -742,9 +729,8 @@ mod tests {
     #[test]
     fn timelogentry_basic_mutators() {
         let tdy = Local::today().naive_local();
-        let mut entry = TimeLogEntry::new(tdy, TimeLogEntryType::Work);
         let start_time = NaiveTime::from_hms(11, 30, 0);
-        entry.set_start(start_time);
+        let mut entry = TimeLogEntry::start(tdy, TimeLogEntryType::Work, start_time);
         assert_eq!(entry.start, Some(start_time));
         let end_time = NaiveTime::from_hms(12, 30, 0);
         entry.set_end(end_time);
@@ -810,25 +796,6 @@ mod tests {
         assert_eq!(all_undef_pl, all_undef_pl.parse::<TimeLogEntry>().unwrap().to_string());
         let all_undef_s = "2017/12/22 Fri | Sickness UNDEF UNDEF";
         assert_eq!(all_undef_s, all_undef_s.parse::<TimeLogEntry>().unwrap().to_string());
-    }
-
-
-    #[test]
-    fn timelogday_is_weekday() {
-        let mon = TimeLogDay::empty(NaiveDate::from_ymd(2017, 11, 20));
-        let tue = TimeLogDay::empty(NaiveDate::from_ymd(2017, 11, 21));
-        let wed = TimeLogDay::empty(NaiveDate::from_ymd(2017, 11, 22));
-        let thu = TimeLogDay::empty(NaiveDate::from_ymd(2017, 11, 23));
-        let fri = TimeLogDay::empty(NaiveDate::from_ymd(2017, 11, 24));
-        let sat = TimeLogDay::empty(NaiveDate::from_ymd(2017, 11, 25));
-        let sun = TimeLogDay::empty(NaiveDate::from_ymd(2017, 11, 26));
-        assert!(mon.is_weekday());
-        assert!(tue.is_weekday());
-        assert!(wed.is_weekday());
-        assert!(thu.is_weekday());
-        assert!(fri.is_weekday());
-        assert!(!sun.is_weekday());
-        assert!(!sat.is_weekday());
     }
 
     #[test]
@@ -1325,5 +1292,26 @@ mod tests {
         assert_eq!(logger.flextime_as_of(fri), Duration::hours(2));
         assert_eq!(logger.flextime_as_of(sat), Duration::minutes(60 + 15));
 
+    }
+
+    #[test]
+    fn timelogger_consistent_serialization() {
+        let nov_mon_1 = "2017/11/13 Mon | Work 08:00:00 18:00:00";
+        let nov_tue_1 = "2017/11/14 Tue | Work 07:30:00 12:00:00";
+        let nov_wed_1 = "2017/11/15 Wed | Work 09:10:00 15:10:00";
+        let mon_1 = "2017/12/18 Mon | Work 06:31:00 07:00:00";
+        let mon_2 = "2017/12/18 Mon | Work 07:31:00 UNDEF";
+        let tue_1 = "2017/12/19 Tue | Work 07:31:00 11:50:00";
+        let tue_2 = "2017/12/19 Tue | Work 12:34:00 18:15:00";
+        let wed_1 = "2017/12/20 Wed | Work 09:10:00 11:55:00";
+        let wed_2 = "2017/12/20 Wed | Work 12:40:00 18:45:00";
+
+        let s = format!("{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n",
+                        nov_mon_1, nov_tue_1, nov_wed_1,
+                        mon_1, mon_2, tue_1, tue_2, wed_1, wed_2);
+
+        let mut logger = TimeLogger{file_path: PathBuf::new(), date2logday: HashMap::new()};
+        logger.read_entries(s.as_str()).unwrap();
+        assert_eq!(logger.write_entries(), s);
     }
 }
