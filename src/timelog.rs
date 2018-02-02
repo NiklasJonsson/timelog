@@ -300,9 +300,13 @@ macro_rules! gen_set {
             let mut found = false;
             for mut entry in &mut self.entries {
                 if entry.$entry_field.is_none() && entry.entry_type == entry_type {
-                    entry.$entry_mutator(time);
-                    found = true;
-                    break;
+                    if found {
+                        println!("WARN: Found more than one UNDEF this day");
+                        break;
+                    } else {
+                        entry.$entry_mutator(time);
+                        found = true;
+                    }
                 }
             }
 
@@ -343,6 +347,7 @@ impl TimeLogDay {
 
     fn add_entry(&mut self, e: TimeLogEntry) {
         self.entries.push(e);
+        self.entries.sort();
     }
 
     fn empty(date: NaiveDate) -> TimeLogDay {
@@ -389,6 +394,7 @@ impl TimeLogDay {
         // If we find an an entry with Some, None then we use end to add extra time to dur
         for e in &self.entries {
             if e.start.is_some() && e.end.is_none() && e.entry_type == etype {
+                debug_assert!(e.start.unwrap() <= end);
                 dur = dur + end.signed_duration_since(e.start.unwrap());
                 break;
             }
@@ -541,23 +547,6 @@ macro_rules! gen_x_in_y_of {
     }
 }
 
-macro_rules! gen_todays {
-    // start/end_of_day
-    ($fname1: ident, $fname2: ident, $delegate: ident) => {
-        fn $fname1(&self, date: NaiveDate, etype: TimeLogEntryType) -> Option<NaiveTime> {
-            let mut ret = None;
-            if let Some(day) = self.date2logday.get(&date) {
-                ret = day.$delegate(etype);
-            }
-            return ret;
-        }
-
-        fn $fname2(&self, etype: TimeLogEntryType) -> Option<NaiveTime> {
-            self.$fname1(Local::today().naive_local(), etype)
-        }
-    }
-}
-
 macro_rules! gen_log {
     ($fname: ident, $mutator:ident) => {
         pub fn $fname(&mut self, date: NaiveDate, time: NaiveTime) {
@@ -640,23 +629,11 @@ impl TimeLogger {
     gen_x_in_y_of!(compute_logged_time_in_week_of, compute_logged_time_between,
                   get_first_day_in_week_of, get_last_day_in_week_of);
 
-    gen_todays!(start_of_day, todays_start, get_start);
-    gen_todays!(end_of_day, todays_end, get_end);
-
     gen_log!(log_start, set_start);
     gen_log!(log_end, set_end);
 
     fn compute_time_left_in_month_of(&self, date: NaiveDate, etype: TimeLogEntryType) -> Duration {
         self.compute_loggable_time_in_month_of(date, etype) - self.compute_logged_time_in_month_of(date, etype)
-    }
-
-    fn compute_time_left_in_week_of(&self, date: NaiveDate, etype: TimeLogEntryType) -> Duration {
-        self.compute_loggable_time_in_week_of(date, etype) - self.compute_logged_time_in_week_of(date, etype)
-    }
-
-    fn time_worked_today_with(&self, end: NaiveTime) -> TimeLogResult<Duration> {
-        let today = Local::today().naive_local();
-        return self.date2logday.get(&today).ok_or_else(|| TimeLogError::inv_inp("Can't find start time, no entries for today\n"))?.time_logged_with(end, TimeLogEntryType::Work);
     }
 
     fn flextime_as_of(&self, date: NaiveDate) -> Duration {
@@ -670,22 +647,40 @@ impl TimeLogger {
             self.compute_logged_time_between(*keys[0], date.pred(), TimeLogEntryType::Work);
     }
 
+    // Clean these up
     pub fn time_worked_today(&self) -> TimeLogResult<Duration> {
+        let now = Local::now();
+        let today = now.date().naive_local();
         let etype = TimeLogEntryType::Work;
-        let end = self.todays_end(etype).unwrap_or(Local::now().time());
-        self.time_worked_today_with(end)
+        return self
+            .date2logday
+            .get(&today)
+            .ok_or_else(|| TimeLogError::inv_inp("Can't find start time, no entries for today\n"))?
+            .time_logged_with(now.time(), etype);
     }
 
-    pub fn time_left_this_week(&self) -> Duration {
+    pub fn time_worked_this_week(&self) -> TimeLogResult<Duration> {
         let now = Local::now();
         let etype = TimeLogEntryType::Work;
         let today = now.naive_local().date();
-        self.compute_time_left_in_week_of(today, etype) -
-            match self.todays_end(etype) {
-                Some(_) => Duration::seconds(0), // We have already added this
-                None => self.time_worked_today_with(now.time()).unwrap_or(Duration::seconds(0)),
-            } +
-            self.flextime_as_of(today.pred())
+        let time_worked = self
+            .compute_logged_time_between(get_first_day_in_week_of(today), today.pred(), etype)
+            + self
+            .date2logday
+            .get(&today)
+            .ok_or_else(|| TimeLogError::inv_inp("Can't find start time, no entries for today\n"))?
+            .time_logged_with(now.time(), etype)?;
+        return Ok(time_worked);
+    }
+
+    pub fn time_left_this_week(&self) -> TimeLogResult<(Duration, Duration)> {
+        let now = Local::now();
+        let etype = TimeLogEntryType::Work;
+        let today = now.naive_local().date();
+        let workable_time = self.compute_loggable_time_in_week_of(today, etype);
+        // TODO: Use the same date here as well
+        let time_worked = self.time_worked_this_week()?;
+        return Ok((workable_time - time_worked, self.flextime_as_of(today.pred())));
     }
 
     pub fn hours_left_this_month(&self) -> u32 {
@@ -1234,34 +1229,6 @@ mod tests {
         logger.log_end(*today, end);
         assert_eq!(logger.date2logday[today].entries[0].start, Some(start));
         assert_eq!(logger.date2logday[today].entries[0].end, Some(end));
-    }
-
-    #[test]
-    fn timelogger_todays_start_end() {
-        let mon_1 = "2017/12/18 Mon | Work 06:31:00 07:00:00";
-        let mon_2 = "2017/12/18 Mon | Work 07:31:00 UNDEF";
-        let tue_1 = "2017/12/19 Tue | Work UNDEF 11:50:00";
-        let tue_2 = "2017/12/19 Tue | Work 12:31:00 18:15:00";
-        let wed_1 = "2017/12/20 Wed | Work UNDEF UNDEF";
-        let wed_2 = "2017/12/20 Wed | Work UNDEF UNDEF";
-
-        let s = format!("{}\n{}\n{}\n{}\n{}\n{}",
-                        mon_1, mon_2, tue_1, tue_2, wed_1, wed_2);
-
-        let mut logger = TimeLogger{file_path: PathBuf::new(), date2logday: HashMap::new()};
-        logger.read_entries(s.as_str()).unwrap();
-
-        let mon = NaiveDate::from_ymd(2017,12,18);
-        let tue = NaiveDate::from_ymd(2017,12,19);
-        let wed = NaiveDate::from_ymd(2017,12,20);
-
-        assert_eq!(logger.start_of_day(mon, TimeLogEntryType::Work), Some(NaiveTime::from_hms(6,31,0)));
-        assert_eq!(logger.start_of_day(tue, TimeLogEntryType::Work), Some(NaiveTime::from_hms(12,31,0)));
-        assert_eq!(logger.start_of_day(wed, TimeLogEntryType::Work), None);
-
-        assert_eq!(logger.end_of_day(mon, TimeLogEntryType::Work), Some(NaiveTime::from_hms(7,0,0)));
-        assert_eq!(logger.end_of_day(tue, TimeLogEntryType::Work), Some(NaiveTime::from_hms(18,15,0)));
-        assert_eq!(logger.end_of_day(wed, TimeLogEntryType::Work), None);
     }
 
     #[test]

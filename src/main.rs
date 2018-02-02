@@ -29,7 +29,6 @@ Options:
 ";
 
 // TODO: Nice features:
-// How many hours have i worked this week?
 // Remaing hours / remaining days (avg)
 // Close to optimal schedule? Store optimal schedule in str/file (maybe .timelog/.schedule.txt?)
 // (calculate by hand) and then print stats on how close I am.
@@ -95,8 +94,26 @@ fn real_main() -> i32 {
     } else if args.cmd_month {
         println!("{} hrs left of {} this month", tl.hours_left_this_month(), tl.total_hours_this_month());
     } else if args.cmd_week {
-        let time = tl.time_left_this_week();
-        println!("{};{} left this week", time.num_hours(), time.num_minutes() % 60);
+        let (time_left, flex) = match tl.time_left_this_week() {
+            Ok(x) => x,
+            Err(e) => {
+                println!("Couldn't calculate time left this week: {}", e);
+                return 1;
+            },
+        };
+        let time_worked = match tl.time_worked_this_week() {
+            Ok(x) => x,
+            Err(e) => {
+                println!("Couldn't calculate time worked this week: {}", e);
+                return 1;
+            },
+        };
+
+        println!("{};{} worked this week\n{};{} left this week ({};{} of which is flex)",
+        // TODO: Rewrite this with method
+        time_worked.num_hours(), time_worked.num_minutes() % 60,
+        time_left.num_hours(), time_left.num_minutes() % 60,
+        flex.num_hours(), flex.num_minutes() % 60);
     } else if args.cmd_day {
         let diff = match tl.time_worked_today() {
             Ok(x) => x,
