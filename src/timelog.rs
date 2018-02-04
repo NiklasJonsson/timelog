@@ -296,6 +296,7 @@ impl From<TimeLogEntry> for TimeLogDay {
 macro_rules! gen_set {
     ($func: ident, $entry_field: ident, $entry_mutator: ident, $ctor: path) => {
         fn $func(&mut self, time: NaiveTime, entry_type: TimeLogEntryType) {
+            debug_assert!(self.validate_ordering());
             debug_assert!(time.nanosecond() == 0);
             let mut found = false;
             for mut entry in &mut self.entries {
@@ -381,7 +382,6 @@ impl TimeLogDay {
         return None;
     }
 
-    // TODO: Test
     fn time_logged_with(&self, end: NaiveTime, etype: TimeLogEntryType) -> TimeLogResult<Duration> {
         let mut dur = self.logged_time(etype);
 
@@ -392,37 +392,20 @@ impl TimeLogDay {
         }
 
         // If we find an an entry with Some, None then we use end to add extra time to dur
+        let mut found = false;
         for e in &self.entries {
             if e.start.is_some() && e.end.is_none() && e.entry_type == etype {
                 debug_assert!(e.start.unwrap() <= end);
-                dur = dur + end.signed_duration_since(e.start.unwrap());
-                break;
+                if !found {
+                    dur = dur + end.signed_duration_since(e.start.unwrap());
+                    found = true;
+                } else {
+                    println!("More than one entry with undefined end at: {}", self.date);
+                }
             }
         }
         return Ok(dur);
     }
-
-    /* TODO: Consume only as many lines as needed from the iterator
-       fn from_iterator(pk: &mut Peekable<Lines>) -> TimeLogResult<TimeLogDay> {
-       let mut entries = Vec::new();
-       let date = NaiveDate::parse_from_str(
-       pk.peek().ok_or_else(|| TimeLogError::inv_inp("Not enough lines to read TimeLogDay"))?,
-       TIMELOGDAY_NAIVEDATE_FORMAT_STRING!())
-       .or_else(|_| Err(TimeLogError::parse_error("Unable to parse date for TimeLogDay".into())))?;
-       pk.next(); // Consume date line
-       let mut count = 0;
-
-       while let Some(line) = pk.take_while(|line| line.trim().parse<TimeLogEntry>().is_ok()) {
-       if let Ok(entry) = line.trim().parse() {
-       entries.push(entry);
-       } else {
-       break;
-       }
-       pk.next();
-       }
-       Ok(TimeLogDay{date: date, entries: entries})
-       }
-       */
 
     fn loggable_time(&self, etype: TimeLogEntryType) -> Duration {
         if is_weekday(self.date) {
@@ -433,6 +416,7 @@ impl TimeLogDay {
     }
 
     fn logged_time(&self, etype: TimeLogEntryType) -> Duration {
+        debug_assert!(self.validate_ordering());
         let mut sum = Duration::seconds(0);
         for e in &self.entries {
             debug_assert!(is_weekday(self.date));
@@ -479,7 +463,7 @@ impl FromStr for TimeLogDay {
     }
 }
 
-fn get_first_day_in_week_of(date: NaiveDate) -> NaiveDate {
+fn get_monday_in_week_of(date: NaiveDate) -> NaiveDate {
     let mut first_day = date;
     while first_day.weekday() != Weekday::Mon {
         first_day = first_day.pred();
@@ -488,7 +472,7 @@ fn get_first_day_in_week_of(date: NaiveDate) -> NaiveDate {
     return first_day;
 }
 
-fn get_last_day_in_week_of(date: NaiveDate) -> NaiveDate {
+fn get_friday_in_week_of(date: NaiveDate) -> NaiveDate {
     // TODO: Cleanup?
     let mut friday = date;
     if date.weekday() == Weekday::Sat || date.weekday() == Weekday::Sun {
@@ -625,9 +609,9 @@ impl TimeLogger {
     gen_x_in_y_of!(compute_logged_time_in_month_of, compute_logged_time_between,
                   get_first_day_in_month_of, get_last_day_in_month_of);
     gen_x_in_y_of!(compute_loggable_time_in_week_of, compute_loggable_time_between,
-                  get_first_day_in_week_of, get_last_day_in_week_of);
+                  get_monday_in_week_of, get_friday_in_week_of);
     gen_x_in_y_of!(compute_logged_time_in_week_of, compute_logged_time_between,
-                  get_first_day_in_week_of, get_last_day_in_week_of);
+                  get_monday_in_week_of, get_friday_in_week_of);
 
     gen_log!(log_start, set_start);
     gen_log!(log_end, set_end);
@@ -696,7 +680,7 @@ impl TimeLogger {
         let etype = TimeLogEntryType::Work;
         let today = now.naive_local().date();
         let time_worked = self
-            .compute_logged_time_between(get_first_day_in_week_of(today), today.pred(), etype)
+            .compute_logged_time_between(get_monday_in_week_of(today), today.pred(), etype)
             + self
             .date2logday
             .get(&today)
@@ -998,23 +982,22 @@ mod tests {
         assert_eq!(day.entries[2].date, NaiveDate::from_ymd(2017, 12, 18));
     }
 
+    #[test]
+    fn timelogday_time_logged_with() {
+        let entries = vec![
+            "2017/12/18 Mon | Work 06:00:00 07:00:00\n",
+            "2017/12/18 Mon | Work 07:31:00 UNDEF\n",
+        ];
+        let mut s = String::new();
+        for e in entries {
+            s.push_str(e);
+        }
 
+        let mut day: TimeLogDay = s.as_str().parse().unwrap();
+        let etype = TimeLogEntryType::Work;
+        assert_eq!(day.time_logged_with(NaiveTime::from_hms(8,0,0), etype), Ok(Duration::minutes(89)));
+    }
 
-    /*
-       #[test]
-       fn timelogday_from_iterator() {
-       let lines = "2017/11/01 Wednesday\nWork 01:01:00 02:02:00\nSickness 03:03:00 04:04:00\nWork 04:05:00 04:06:00".lines();
-       let some_entries = TimeLogDay::from_iterator(&mut lines.peekable()).unwrap();
-       assert_eq!(some_entries.entries.len(), 3);
-       assert_eq!(some_entries.date, NaiveDate::from_ymd(2017, 11, 1));
-       assert_eq!(some_entries.entries[0].start, Some(NaiveTime::from_hms(1,1,0)));
-       assert_eq!(some_entries.entries[0].end, Some(NaiveTime::from_hms(2,2,0)));
-       assert_eq!(some_entries.entries[1].start, Some(NaiveTime::from_hms(3,3,0)));
-       assert_eq!(some_entries.entries[1].end, Some(NaiveTime::from_hms(4,4,0)));
-       assert_eq!(some_entries.entries[2].start, Some(NaiveTime::from_hms(4,5,0)));
-       assert_eq!(some_entries.entries[2].end, Some(NaiveTime::from_hms(4,6,0)));
-       }
-       */
     #[test]
     fn parse_duration_input() {
         assert_eq!(super::parse_duration("00;30"), Ok(Duration::minutes(30)));

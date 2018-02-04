@@ -8,6 +8,7 @@ mod timelog;
 use docopt::Docopt;
 use chrono::prelude::*;
 use chrono::NaiveTime;
+use chrono::Duration;
 use chrono::ParseResult;
 use timelog::TimeLogger;
 use timelog::TimeLogError;
@@ -56,6 +57,10 @@ fn get_time(s: Option<String>) -> ParseResult<NaiveTime> {
         Some(x) => parse_time_arg(&x),
         None => Ok(Local::now().time()),
     }
+}
+
+fn fmt_dur(dur: Duration) -> String {
+    format!("{};{}", dur.num_hours(), dur.num_minutes() % 60)
 }
 
 fn real_main() -> i32 {
@@ -107,11 +112,10 @@ fn real_main() -> i32 {
             },
         };
 
-        println!("{};{} worked this week\n{};{} left this week ({};{} of which is flex)",
-        // TODO: Rewrite this with method
-        time_worked.num_hours(), time_worked.num_minutes() % 60,
-        time_left.num_hours(), time_left.num_minutes() % 60,
-        flex.num_hours(), flex.num_minutes() % 60);
+        println!("{} worked this week\n{} left this week ({} of which is flex)",
+        fmt_dur(time_worked),
+        fmt_dur(time_left),
+        fmt_dur(flex));
     } else if args.cmd_day {
         let time = match get_time(args.flag_with_end) {
             Ok(t) => t,
@@ -141,9 +145,7 @@ fn real_main() -> i32 {
             }
           },
         };
-        let hours = diff.num_hours();
-        let extra_minutes = diff.num_minutes() % 60;
-        println!("{};{} worked today", hours, extra_minutes);
+        println!("{} worked today", fmt_dur(diff));
     }
 
     match tl.save() {
