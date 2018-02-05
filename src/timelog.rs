@@ -680,7 +680,8 @@ impl TimeLogger {
         let workable_time = self.compute_loggable_time_in_week_of(today, etype);
         // TODO: Use the same date here as well
         let time_worked = self.time_worked_this_week()?;
-        return Ok((workable_time - time_worked, self.flextime_as_of(today.pred())));
+        let flex_time = self.flextime_as_of(today.pred());
+        return Ok((workable_time - time_worked + flex_time, flex_time));
     }
 
     pub fn hours_left_this_month(&self) -> u32 {

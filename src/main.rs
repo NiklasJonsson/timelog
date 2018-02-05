@@ -28,6 +28,7 @@ Options:
   -h --help     Show this screen.
 ";
 
+// TODO: timelog day --with-end=<time>
 // TODO: Nice features:
 // Remaing hours / remaining days (avg)
 // Close to optimal schedule? Store optimal schedule in str/file (maybe .timelog/.schedule.txt?)
