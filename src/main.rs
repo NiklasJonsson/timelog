@@ -28,14 +28,6 @@ Options:
   -h --help     Show this screen.
 ";
 
-// TODO: timelog day --with-end=<time>
-// TODO: Nice features:
-// Remaing hours / remaining days (avg)
-// Close to optimal schedule? Store optimal schedule in str/file (maybe .timelog/.schedule.txt?)
-// (calculate by hand) and then print stats on how close I am.
-// TODO: timelog break <dur> [<time>] which would end the previous segment, and start new
-// with dur in between.
-
 #[derive(Debug, Deserialize)]
 struct Args {
 	cmd_start: bool,
