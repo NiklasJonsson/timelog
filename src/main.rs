@@ -21,6 +21,7 @@ Usage:
   timelog month
   timelog week
   timelog day [--with-end=<time>]
+  timelog day [--last]
   timelog
   timelog (-h | --help)
 
@@ -37,7 +38,8 @@ struct Args {
     cmd_day: bool,
     arg_time: Option<String>,
     arg_duration: Option<String>,
-    flag_with_end: Option<String>
+    flag_with_end: Option<String>,
+    flag_last: bool
 }
 
 fn parse_time_arg(s: &String) -> ParseResult<NaiveTime> {
@@ -116,13 +118,26 @@ fn real_main() -> i32 {
                 return 1;
             },
         };
-
-        let diff = match tl.time_worked_at_date_with(Local::today().naive_local(), time) {
-            Ok(x) => x,
-            Err(e) => {
-                println!("Couldn't calculate time worked today: {}", e);
+        // TODO: Cleanup
+        let diff = match args.flag_last {
+          false => {
+            match tl.time_worked_at_date_with(Local::today().naive_local(), time) {
+              Ok(x) => x,
+                Err(e) => {
+                  println!("Couldn't calculate time worked today: {}", e);
+                  return 1;
+                }
+            }
+          },
+          true => {
+            match tl.time_worked_at_date(Local::today().naive_local().pred()) {
+              Ok(x) => x,
+              Err(e) => {
+                println!("Couldn't calculate time worked yesterday: {}", e);
                 return 1;
-            },
+              }
+            }
+          },
         };
         let hours = diff.num_hours();
         let extra_minutes = diff.num_minutes() % 60;

@@ -672,7 +672,6 @@ impl TimeLogger {
 
    // Clean these up
     pub fn time_worked_at_date_with(&self, date: NaiveDate, with: NaiveTime) -> TimeLogResult<Duration> {
-        let now = Local::now();
         let etype = TimeLogEntryType::Work;
         return self
             .date2logday
@@ -681,6 +680,16 @@ impl TimeLogger {
             .time_logged_with(with, etype);
     }
 
+   // Clean these up
+    pub fn time_worked_at_date(&self, date: NaiveDate) -> TimeLogResult<Duration> {
+    // TODO: Assert/warn that there are only full entries for each date
+        let etype = TimeLogEntryType::Work;
+        return Ok(self
+            .date2logday
+            .get(&date)
+            .ok_or_else(|| TimeLogError::inv_inp(format!("Can't find start time, no entries for date: {}\n", date).as_str()))?
+            .logged_time(etype));
+    }
 
     pub fn time_worked_this_week(&self) -> TimeLogResult<Duration> {
         let now = Local::now();
