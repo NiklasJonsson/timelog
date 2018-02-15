@@ -20,7 +20,7 @@ Usage:
   timelog end [<time>]
   timelog month
   timelog week
-  timelog day
+  timelog day [--with-end=<time>]
   timelog
   timelog (-h | --help)
 
@@ -30,13 +30,14 @@ Options:
 
 #[derive(Debug, Deserialize)]
 struct Args {
-	cmd_start: bool,
-	cmd_end: bool,
+    cmd_start: bool,
+    cmd_end: bool,
     cmd_month: bool,
     cmd_week: bool,
     cmd_day: bool,
-	arg_time: Option<String>,
-	arg_duration: Option<String>,
+    arg_time: Option<String>,
+    arg_duration: Option<String>,
+    flag_with_end: Option<String>
 }
 
 fn parse_time_arg(s: &String) -> ParseResult<NaiveTime> {
@@ -54,9 +55,9 @@ fn get_time(s: Option<String>) -> ParseResult<NaiveTime> {
 }
 
 fn real_main() -> i32 {
-	let args: Args = Docopt::new(USAGE)
-		.and_then(|d| d.deserialize())
-		.unwrap_or_else(|e| e.exit());
+    let args: Args = Docopt::new(USAGE)
+        .and_then(|d| d.deserialize())
+        .unwrap_or_else(|e| e.exit());
 
     let mut tl = match TimeLogger::default() {
       Ok(x) => x,
@@ -108,7 +109,15 @@ fn real_main() -> i32 {
         time_left.num_hours(), time_left.num_minutes() % 60,
         flex.num_hours(), flex.num_minutes() % 60);
     } else if args.cmd_day {
-        let diff = match tl.time_worked_today() {
+        let time = match get_time(args.flag_with_end) {
+            Ok(t) => t,
+            Err(e) => {
+                println!("Unable to parse args: {}", e);
+                return 1;
+            },
+        };
+
+        let diff = match tl.time_worked_at_date_with(Local::today().naive_local(), time) {
             Ok(x) => x,
             Err(e) => {
                 println!("Couldn't calculate time worked today: {}", e);
