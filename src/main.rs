@@ -46,7 +46,9 @@ fn parse_time_arg(s: &String) -> ParseResult<NaiveTime> {
     // %R = %H:%M
     // %H: hour, two digits
     // %M: minute, two digits
-    NaiveTime::parse_from_str(s, "%R").or(NaiveTime::parse_from_str(s, "%H.%M"))
+    NaiveTime::parse_from_str(s, "%R")
+    .or(NaiveTime::parse_from_str(s, "%H.%M"))
+    .or(NaiveTime::parse_from_str(s, "%H"))
 }
 
 fn get_time(s: Option<String>) -> ParseResult<NaiveTime> {
