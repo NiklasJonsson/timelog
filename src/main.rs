@@ -23,6 +23,7 @@ Usage:
   timelog week
   timelog day [--with-end=<time>]
   timelog day [--last]
+  timelog day [--mon | --tue | --wed | --thu]
   timelog
   timelog (-h | --help)
 
@@ -40,7 +41,11 @@ struct Args {
     arg_time: Option<String>,
     arg_duration: Option<String>,
     flag_with_end: Option<String>,
-    flag_last: bool
+    flag_last: bool,
+    flag_mon: bool,
+    flag_tue: bool,
+    flag_wed: bool,
+    flag_thu: bool,
 }
 
 fn parse_time_arg(s: &String) -> ParseResult<NaiveTime> {
@@ -61,6 +66,34 @@ fn get_time(s: Option<String>) -> ParseResult<NaiveTime> {
 
 fn fmt_dur(dur: Duration) -> String {
     format!("{};{}", dur.num_hours(), dur.num_minutes() % 60)
+}
+
+fn get_date_for_day_cmd(args: &Args) -> NaiveDate {
+    let mut date = Local::today().naive_local();
+    let mut target = date.weekday();
+    if args.flag_mon {
+        target = Weekday::Mon;
+    } else if args.flag_tue {
+        target = Weekday::Tue;
+    } else if args.flag_wed {
+        target = Weekday::Wed;
+    } else if args.flag_thu {
+        target = Weekday::Thu;
+    } else if args.flag_last {
+        target = date.pred().weekday();
+    } else {
+        debug_assert!(!args.flag_last
+                      || !args.flag_mon
+                      || !args.flag_tue
+                      || !args.flag_wed
+                      || !args.flag_thu);
+
+    }
+    while date.weekday() != target {
+        date = date.pred();
+    }
+
+    return date;
 }
 
 fn real_main() -> i32 {
@@ -117,35 +150,36 @@ fn real_main() -> i32 {
         fmt_dur(time_left),
         fmt_dur(flex));
     } else if args.cmd_day {
-        let time = match get_time(args.flag_with_end) {
-            Ok(t) => t,
-            Err(e) => {
-                println!("Unable to parse args: {}", e);
-                return 1;
-            },
-        };
-        // TODO: Cleanup
-        let diff = match args.flag_last {
-          false => {
-            match tl.time_worked_at_date_with(Local::today().naive_local(), time) {
-              Ok(x) => x,
+        let date = get_date_for_day_cmd(&args);
+        let today = !(args.flag_last || args.flag_mon || args.flag_tue || args.flag_wed || args.flag_thu);
+
+        let worked_time: Duration;
+        if today {
+            let time = match get_time(args.flag_with_end) {
+                Ok(t) => t,
                 Err(e) => {
-                  println!("Couldn't calculate time worked today: {}", e);
-                  return 1;
+                    println!("Unable to parse args: {}", e);
+                    return 1;
+                },
+            };
+
+            worked_time = match tl.time_worked_at_date_with(date, time) {
+                Ok(x) => x,
+                Err(e) => {
+                    println!("Couldn't calculate time worked today: {}", e);
+                    return 1;
                 }
-            }
-          },
-          true => {
-            match tl.time_worked_at_date(Local::today().naive_local().pred()) {
-              Ok(x) => x,
-              Err(e) => {
-                println!("Couldn't calculate time worked yesterday: {}", e);
-                return 1;
-              }
-            }
-          },
-        };
-        println!("{} worked today", fmt_dur(diff));
+            };
+        } else {
+            worked_time = match tl.time_worked_at_date(date) {
+                Ok(x) => x,
+                Err(e) => {
+                    println!("Couldn't calculate time worked at {}: {}", date, e);
+                    return 1;
+                }
+            };
+        }
+        println!("{} worked today", fmt_dur(worked_time));
     }
 
     match tl.save() {
