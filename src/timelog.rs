@@ -473,7 +473,6 @@ fn get_monday_in_week_of(date: NaiveDate) -> NaiveDate {
 }
 
 fn get_friday_in_week_of(date: NaiveDate) -> NaiveDate {
-    // TODO: Cleanup?
     let mut friday = date;
     if date.weekday() == Weekday::Sat || date.weekday() == Weekday::Sun {
         while friday.weekday() != Weekday::Fri {
@@ -626,8 +625,6 @@ impl TimeLogger {
         if keys.len() == 0 {
             return Duration::hours(0);
         }
-        // TODO: Test this
-
         let mut sunday_last_week = match date.weekday() {
            Weekday::Sun =>  date.pred(),
            _ =>  date,
@@ -642,37 +639,20 @@ impl TimeLogger {
             self.compute_logged_time_between(*keys[0], sunday_last_week, TimeLogEntryType::Work);
     }
 
-    // Clean these up
-    pub fn time_worked_today(&self) -> TimeLogResult<Duration> {
-        let now = Local::now();
-        let today = now.date().naive_local();
-        let etype = TimeLogEntryType::Work;
-        return self
-            .date2logday
-            .get(&today)
-            .ok_or_else(|| TimeLogError::inv_inp("Can't find start time, no entries for today\n"))?
-            .time_logged_with(now.time(), etype);
-    }
-
    // Clean these up
-    pub fn time_worked_at_date_with(&self, date: NaiveDate, with: NaiveTime) -> TimeLogResult<Duration> {
+    pub fn time_worked_at_date_with(&self, date: NaiveDate, with: Option<NaiveTime>) -> TimeLogResult<Duration> {
         let etype = TimeLogEntryType::Work;
-        return self
+        let tld = self
             .date2logday
             .get(&date)
-            .ok_or_else(|| TimeLogError::inv_inp(format!("Can't find start time, no entries for date: {}\n", date).as_str()))?
-            .time_logged_with(with, etype);
-    }
+            .ok_or_else(|| TimeLogError::inv_inp(
+                    format!("Can't find start time, no entries for date: {}\n", date).as_str()))?;
 
-   // Clean these up
-    pub fn time_worked_at_date(&self, date: NaiveDate) -> TimeLogResult<Duration> {
-    // TODO: Assert/warn that there are only full entries for each date
-        let etype = TimeLogEntryType::Work;
-        return Ok(self
-            .date2logday
-            .get(&date)
-            .ok_or_else(|| TimeLogError::inv_inp(format!("Can't find start time, no entries for date: {}\n", date).as_str()))?
-            .logged_time(etype));
+        if with.is_some() {
+            return tld.time_logged_with(with.unwrap(), etype);
+        } else {
+            return Ok(tld.logged_time(etype));
+        }
     }
 
     pub fn time_worked_this_week(&self) -> TimeLogResult<Duration> {

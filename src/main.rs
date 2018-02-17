@@ -154,31 +154,26 @@ fn real_main() -> i32 {
         let today = !(args.flag_last || args.flag_mon || args.flag_tue || args.flag_wed || args.flag_thu);
 
         let worked_time: Duration;
-        if today {
-            let time = match get_time(args.flag_with_end) {
-                Ok(t) => t,
-                Err(e) => {
-                    println!("Unable to parse args: {}", e);
-                    return 1;
-                },
-            };
+        let time  = match get_time(args.flag_with_end) {
+            Ok(t) => t,
+            Err(e) => {
+                println!("Unable to parse args: {}", e);
+                return 1;
+            },
+        };
 
-            worked_time = match tl.time_worked_at_date_with(date, time) {
-                Ok(x) => x,
-                Err(e) => {
-                    println!("Couldn't calculate time worked today: {}", e);
-                    return 1;
-                }
-            };
-        } else {
-            worked_time = match tl.time_worked_at_date(date) {
-                Ok(x) => x,
-                Err(e) => {
-                    println!("Couldn't calculate time worked at {}: {}", date, e);
-                    return 1;
-                }
-            };
-        }
+        let time_opt = match today {
+            true => Some(time),
+            false => None,
+        };
+
+        let worked_time = match tl.time_worked_at_date_with(date, time_opt) {
+            Ok(x) => x,
+            Err(e) => {
+                println!("Couldn't calculate time worked today: {}", e);
+                return 1;
+            }
+        };
         println!("{} worked today", fmt_dur(worked_time));
     }
 
