@@ -21,7 +21,7 @@ Usage:
   timelog end [<time>]
   timelog month
   timelog week [--last]
-  timelog day [--with-end=<time>]
+  timelog day [--with=<time>]
   timelog day [--last]
   timelog day [--mon|--tue|--wed|--thu]
   timelog (-h | --help)
@@ -39,7 +39,7 @@ struct Args {
     cmd_day: bool,
     arg_time: Option<String>,
     arg_duration: Option<String>,
-    flag_with_end: Option<String>,
+    flag_with: Option<String>,
     flag_last: bool,
     flag_mon: bool,
     flag_tue: bool,
@@ -167,7 +167,7 @@ fn real_main() -> i32 {
         let date = get_date_for_day_cmd(&args);
         let today = !(args.flag_last || args.flag_mon || args.flag_tue || args.flag_wed || args.flag_thu);
 
-        let time  = match get_time(args.flag_with_end) {
+        let time  = match get_time(args.flag_with) {
             Ok(t) => t,
             Err(e) => {
                 println!("Unable to parse args: {}", e);
