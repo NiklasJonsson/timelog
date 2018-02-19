@@ -669,6 +669,14 @@ impl TimeLogger {
         return Ok(time_worked);
     }
 
+// TODO: Test and return error on UNDEF fields
+    pub fn time_worked_in_week_of(&self, date: NaiveDate) -> TimeLogResult<Duration> {
+        let etype = TimeLogEntryType::Work;
+        let time_worked = self
+            .compute_logged_time_between(get_monday_in_week_of(date), get_friday_in_week_of(date), etype);
+        return Ok(time_worked);
+    }
+
     pub fn time_left_this_week(&self) -> TimeLogResult<(Duration, Duration)> {
         let now = Local::now();
         let etype = TimeLogEntryType::Work;

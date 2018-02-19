@@ -14,17 +14,16 @@ use timelog::TimeLogger;
 use timelog::TimeLogError;
 
 const USAGE: &'static str = "
-Timelog
+Timelog - log time
 
 Usage:
   timelog start [<time>]
   timelog end [<time>]
   timelog month
-  timelog week
+  timelog week [--last]
   timelog day [--with-end=<time>]
   timelog day [--last]
-  timelog day [--mon | --tue | --wed | --thu]
-  timelog
+  timelog day [--mon|--tue|--wed|--thu]
   timelog (-h | --help)
 
 Options:
@@ -130,30 +129,44 @@ fn real_main() -> i32 {
     } else if args.cmd_month {
         println!("{} hrs left of {} this month", tl.hours_left_this_month(), tl.total_hours_this_month());
     } else if args.cmd_week {
-        let (time_left, flex) = match tl.time_left_this_week() {
-            Ok(x) => x,
-            Err(e) => {
-                println!("Couldn't calculate time left this week: {}", e);
-                return 1;
-            },
-        };
-        let time_worked = match tl.time_worked_this_week() {
-            Ok(x) => x,
-            Err(e) => {
-                println!("Couldn't calculate time worked this week: {}", e);
-                return 1;
-            },
-        };
+        if args.flag_last {
+            let mut date = Local::today().naive_local().pred();
+            while date.weekday() != Weekday::Sun {
+                date = date.pred();
+            }
+            let time = match tl.time_worked_in_week_of(date) {
+                Ok(t) => t,
+                Err(e) => {
+                    println!("Error: {}", e);
+                    return 1;
+                },
+            };
+            println!("{} worked last week", fmt_dur(time));
+        } else {
+            let (time_left, flex) = match tl.time_left_this_week() {
+                Ok(x) => x,
+                Err(e) => {
+                    println!("Couldn't calculate time left this week: {}", e);
+                    return 1;
+                },
+            };
+            let time_worked = match tl.time_worked_this_week() {
+                Ok(x) => x,
+                Err(e) => {
+                    println!("Couldn't calculate time worked this week: {}", e);
+                    return 1;
+                },
+            };
 
-        println!("{} worked this week\n{} left this week ({} of which is flex)",
-        fmt_dur(time_worked),
-        fmt_dur(time_left),
-        fmt_dur(flex));
+            println!("{} worked this week\n{} left this week ({} of which is flex)",
+            fmt_dur(time_worked),
+            fmt_dur(time_left),
+            fmt_dur(flex));
+        }
     } else if args.cmd_day {
         let date = get_date_for_day_cmd(&args);
         let today = !(args.flag_last || args.flag_mon || args.flag_tue || args.flag_wed || args.flag_thu);
 
-        let worked_time: Duration;
         let time  = match get_time(args.flag_with_end) {
             Ok(t) => t,
             Err(e) => {
