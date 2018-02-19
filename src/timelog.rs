@@ -280,7 +280,7 @@ impl Display for TimeLogEntry {
 }
 
 #[derive(Debug, PartialEq)]
-struct TimeLogDay {
+pub struct TimeLogDay {
     date: NaiveDate,
     entries: Vec<TimeLogEntry>,
 }
@@ -719,6 +719,24 @@ impl TimeLogger {
         }
 
     }
+
+    pub fn get_latest_n_entries(&self, n: usize) -> Vec<&TimeLogDay> {
+        let mut days = Vec::with_capacity(n);
+        let mut keys: Vec<&NaiveDate> = self.date2logday.keys().collect();
+        keys.sort();
+
+        for (i,k) in keys.iter().rev().enumerate() {
+            if i >= n {
+              break;
+            }
+            days.push(&self.date2logday[k]);
+        }
+
+        days.reverse();
+
+        return days;
+    }
+
 }
 
 #[cfg(test)]

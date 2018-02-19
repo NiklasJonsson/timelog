@@ -24,11 +24,12 @@ Usage:
   timelog day [--with <time>]
   timelog day [--last]
   timelog day [--mon | --tue | --wed | --thu | --fri]
+  timelog view <n-entries>
   timelog (-h | --help)
 
 Options:
-  -h, --help     Show this screen.
-  -w, --with <time>     If there is no end time for an entry, this will be used instead.
+  -h, --help                Show this screen.
+  -w, --with <time>         If there is no end time for an entry, this will be used instead.
 ";
 
 #[derive(Debug, Deserialize)]
@@ -38,8 +39,9 @@ struct Args {
     cmd_month: bool,
     cmd_week: bool,
     cmd_day: bool,
+    cmd_view: bool,
     arg_time: Option<String>,
-    arg_duration: Option<String>,
+    arg_n_entries: Option<usize>,
     flag_with: Option<String>,
     flag_last: bool,
     flag_mon: bool,
@@ -192,6 +194,11 @@ fn real_main() -> i32 {
             }
         };
         println!("{} worked today", fmt_dur(worked_time));
+    } else if args.cmd_view {
+        debug_assert!(args.arg_n_entries.is_some());
+        for tld in tl.get_latest_n_entries(args.arg_n_entries.unwrap()) {
+            println!("{}", tld);
+        }
     }
 
     match tl.save() {
