@@ -21,13 +21,14 @@ Usage:
   timelog end [<time>]
   timelog month
   timelog week [--last]
-  timelog day [--with=<time>]
+  timelog day [--with <time>]
   timelog day [--last]
-  timelog day [--mon|--tue|--wed|--thu]
+  timelog day [--mon | --tue | --wed | --thu | --fri]
   timelog (-h | --help)
 
 Options:
-  -h --help     Show this screen.
+  -h, --help     Show this screen.
+  -w, --with <time>     If there is no end time for an entry, this will be used instead.
 ";
 
 #[derive(Debug, Deserialize)]
@@ -45,6 +46,7 @@ struct Args {
     flag_tue: bool,
     flag_wed: bool,
     flag_thu: bool,
+    flag_fri: bool,
 }
 
 fn parse_time_arg(s: &String) -> ParseResult<NaiveTime> {
@@ -78,6 +80,8 @@ fn get_date_for_day_cmd(args: &Args) -> NaiveDate {
         target = Weekday::Wed;
     } else if args.flag_thu {
         target = Weekday::Thu;
+    } else if args.flag_fri {
+        target = Weekday::Fri;
     } else if args.flag_last {
         target = date.pred().weekday();
     } else {
@@ -165,7 +169,7 @@ fn real_main() -> i32 {
         }
     } else if args.cmd_day {
         let date = get_date_for_day_cmd(&args);
-        let today = !(args.flag_last || args.flag_mon || args.flag_tue || args.flag_wed || args.flag_thu);
+        let today = !(args.flag_last || args.flag_mon || args.flag_tue || args.flag_wed || args.flag_thu || args.flag_fri);
 
         let time  = match get_time(args.flag_with) {
             Ok(t) => t,
