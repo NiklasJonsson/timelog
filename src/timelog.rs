@@ -669,7 +669,6 @@ impl TimeLogger {
         return Ok(time_worked);
     }
 
-// TODO: Test and return error on UNDEF fields
     pub fn time_worked_in_week_of(&self, date: NaiveDate) -> TimeLogResult<Duration> {
         let etype = TimeLogEntryType::Work;
         let time_worked = self
@@ -682,7 +681,6 @@ impl TimeLogger {
         let etype = TimeLogEntryType::Work;
         let today = now.naive_local().date();
         let workable_time = self.compute_loggable_time_in_week_of(today, etype);
-        // TODO: Use the same date here as well
         let time_worked = self.time_worked_this_week()?;
         let flex_time = self.flextime_as_of(today.pred());
         return Ok((workable_time - time_worked + flex_time, flex_time));
@@ -1252,7 +1250,8 @@ mod tests {
         assert_eq!(logger.date2logday[today].entries[0].start, Some(start));
         assert_eq!(logger.date2logday[today].entries[0].end, Some(end));
     }
-/* TODO: Test
+
+/*
     #[test]
     fn timelogger_flex_time() {
         let mon_1 = "2017/12/18 Mon | Work 08:00:00 16:00:00";
