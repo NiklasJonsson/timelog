@@ -18,6 +18,7 @@ use std::fmt::Formatter;
 use std::str::FromStr;
 use std::collections::HashMap;
 use std::collections::hash_map::Entry::{Occupied, Vacant};
+use std::slice::Iter;
 
 use chrono::NaiveTime;
 use chrono::Duration;
@@ -135,6 +136,16 @@ enum TimeLogEntryType {
     Sickness,
     Vacation,
     ParentalLeave,
+}
+
+impl TimeLogEntryType {
+    pub fn iterator() -> Iter<'static, TimeLogEntryType> {
+        static ETYPES: [TimeLogEntryType; 4] = [TimeLogEntryType::Work,
+                                                TimeLogEntryType::Sickness,
+                                                TimeLogEntryType::Vacation,
+                                                TimeLogEntryType::ParentalLeave];
+        ETYPES.into_iter()
+    }
 }
 
 impl fmt::Display for TimeLogEntryType {
@@ -420,10 +431,14 @@ impl TimeLogDay {
         let mut sum = Duration::seconds(0);
         for e in &self.entries {
             debug_assert!(is_weekday(self.date));
-            if let (Some(start), Some(end)) = (e.start, e.end) {
-                debug_assert!(e.start < e.end);
-                if e.entry_type == etype {
-                    sum = sum + end.signed_duration_since(start);
+            if e.entry_type == etype {
+                if etype == TimeLogEntryType::Work {
+                  if let (Some(start), Some(end)) = (e.start, e.end) {
+                      debug_assert!(e.start < e.end);
+                      sum = sum + end.signed_duration_since(start);
+                  }
+                } else {
+                    sum = sum + Duration::hours(8);
                 }
             }
         }
@@ -609,8 +624,6 @@ impl TimeLogger {
                   get_first_day_in_month_of, get_last_day_in_month_of);
     gen_x_in_y_of!(compute_loggable_time_in_week_of, compute_loggable_time_between,
                   get_monday_in_week_of, get_friday_in_week_of);
-    gen_x_in_y_of!(compute_logged_time_in_week_of, compute_logged_time_between,
-                  get_monday_in_week_of, get_friday_in_week_of);
 
     gen_log!(log_start, set_start);
     gen_log!(log_end, set_end);
@@ -635,8 +648,13 @@ impl TimeLogger {
 
         debug_assert!(sunday_last_week > *keys[0]);
 
-        return self.compute_loggable_time_between(*keys[0], sunday_last_week, TimeLogEntryType::Work) -
-            self.compute_logged_time_between(*keys[0], sunday_last_week, TimeLogEntryType::Work);
+        let start_date = *keys[0];
+        let end_date = sunday_last_week;
+        let logged_time = TimeLogEntryType::iterator()
+            .map(|x| self.compute_logged_time_between(start_date, end_date, *x))
+            .fold(Duration::hours(0), |acc, e| acc + e);
+
+        return self.compute_loggable_time_between(start_date, end_date, TimeLogEntryType::Work) - logged_time;
     }
 
    // Clean these up
@@ -659,21 +677,30 @@ impl TimeLogger {
         let now = Local::now();
         let etype = TimeLogEntryType::Work;
         let today = now.naive_local().date();
+        let start_date = get_monday_in_week_of(today);
+        let end_date = today.pred();
         let time_worked = self
-            .compute_logged_time_between(get_monday_in_week_of(today), today.pred(), etype)
+            .compute_logged_time_between(start_date, end_date, etype)
             + self
             .date2logday
             .get(&today)
             .ok_or_else(|| TimeLogError::inv_inp("Can't find start time, no entries for today\n"))?
             .time_logged_with(now.time(), etype)?;
-        return Ok(time_worked);
+        let logged_time = TimeLogEntryType::iterator()
+            .filter(|x| **x != TimeLogEntryType::Work)
+            .map(|x| self.compute_logged_time_between(start_date, end_date, *x))
+            .fold(Duration::hours(0), |acc, e| acc + e);
+        return Ok(time_worked + logged_time);
     }
 
     pub fn time_worked_in_week_of(&self, date: NaiveDate) -> TimeLogResult<Duration> {
         let etype = TimeLogEntryType::Work;
-        let time_worked = self
-            .compute_logged_time_between(get_monday_in_week_of(date), get_friday_in_week_of(date), etype);
-        return Ok(time_worked);
+        let start_date = get_monday_in_week_of(date);
+        let end_date = get_friday_in_week_of(date);
+        let logged_time = TimeLogEntryType::iterator()
+            .map(|x| self.compute_logged_time_between(start_date, end_date, *x))
+            .fold(Duration::hours(0), |acc, e| acc + e);
+        return Ok(logged_time);
     }
 
     pub fn time_left_this_week(&self) -> TimeLogResult<(Duration, Duration)> {
