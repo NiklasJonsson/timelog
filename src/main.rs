@@ -4,13 +4,14 @@ extern crate docopt;
 extern crate chrono;
 
 mod timelog;
+mod timelogger;
 
 use docopt::Docopt;
 use chrono::prelude::*;
 use chrono::NaiveTime;
 use chrono::Duration;
 use chrono::ParseResult;
-use timelog::TimeLogger;
+use timelogger::TimeLogger;
 use timelog::TimeLogError;
 
 const USAGE: &'static str = "
