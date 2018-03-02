@@ -3,8 +3,6 @@ extern crate chrono;
 use std::path::PathBuf;
 use std::path::Path;
 use std::io::BufReader;
-//use std::iter::Peekable;
-//use std::str::Lines;
 use std::io::prelude::*;
 use std::fs::File;
 use std;
@@ -635,13 +633,16 @@ impl TimeLogger {
     fn flextime_as_of(&self, date: NaiveDate) -> Duration {
         let mut keys: Vec<&NaiveDate> = self.date2logday.keys().collect();
         keys.sort();
+
         if keys.len() == 0 {
             return Duration::hours(0);
         }
+
         let mut sunday_last_week = match date.weekday() {
            Weekday::Sun =>  date.pred(),
            _ =>  date,
         };
+
         while sunday_last_week.weekday() != Weekday::Sun {
           sunday_last_week = sunday_last_week.pred();
         }
@@ -1244,19 +1245,6 @@ mod tests {
         assert_eq!(logger.compute_loggable_time_in_month_of(sun, TimeLogEntryType::Work), Duration::hours(168));
         assert_eq!(logger.compute_loggable_time_in_month_of(mon, TimeLogEntryType::Work), Duration::hours(168));
         assert_eq!(logger.compute_loggable_time_in_month_of(nov_mon, TimeLogEntryType::Work), Duration::hours(176));
-		assert_eq!(logger.compute_logged_time_in_week_of(prev_fri, TimeLogEntryType::Work), d0hr);
-        assert_eq!(logger.compute_logged_time_in_week_of(sat, TimeLogEntryType::Work), d0hr);
-        assert_eq!(logger.compute_logged_time_in_week_of(sun, TimeLogEntryType::Work), d0hr);
-        assert_eq!(logger.compute_logged_time_in_week_of(mon, TimeLogEntryType::Work), dur_tot);
-        assert_eq!(logger.compute_logged_time_in_week_of(tue, TimeLogEntryType::Work), dur_tot);
-        assert_eq!(logger.compute_logged_time_in_week_of(wed, TimeLogEntryType::Work), dur_tot);
-        assert_eq!(logger.compute_logged_time_in_week_of(thu, TimeLogEntryType::Work), dur_tot);
-        assert_eq!(logger.compute_logged_time_in_week_of(fri, TimeLogEntryType::Work), dur_tot);
-
-        assert_eq!(logger.compute_logged_time_in_week_of(nov_mon, TimeLogEntryType::Work), dur_nov);
-        assert_eq!(logger.compute_logged_time_in_week_of(nov_tue, TimeLogEntryType::Work), dur_nov);
-        assert_eq!(logger.compute_logged_time_in_week_of(nov_wed, TimeLogEntryType::Work), dur_nov);
-
         assert_eq!(logger.compute_logged_time_in_month_of(nov_mon, TimeLogEntryType::Work), dur_nov);
         assert_eq!(logger.compute_logged_time_in_month_of(nov_tue, TimeLogEntryType::Work), dur_nov);
         assert_eq!(logger.compute_logged_time_in_month_of(nov_wed, TimeLogEntryType::Work), dur_nov);
@@ -1278,37 +1266,47 @@ mod tests {
         assert_eq!(logger.date2logday[today].entries[0].end, Some(end));
     }
 
-/*
     #[test]
     fn timelogger_flex_time() {
-        let mon_1 = "2017/12/18 Mon | Work 08:00:00 16:00:00";
-        let tue_1 = "2017/12/19 Tue | Work 09:00:00 16:00:00";
-        let wed_1 = "2017/12/20 Wed | Work 08:00:00 16:00:00";
-        let thu_1 = "2017/12/21 Thu | Work 10:00:00 17:00:00";
-        let fri_1 = "2017/12/22 Fri | Work 08:00:00 16:45:00";
+        let days = ["2017/12/11 Mon | Work 08:00:00 16:00:00\n", // 8
+            "2017/12/12 Tue | Work 09:00:00 16:00:00\n", // 7
+            "2017/12/13 Wed | Work 08:00:00 16:00:00\n", // 8
+            "2017/12/14 Thu | Work 10:00:00 17:00:00\n", // 7
+            "2017/12/15 Fri | Work 08:00:00 15:35:00\n", // 7;35
+            // => 37;35
+            "2017/12/18 Mon | Work 08:00:00 18:00:00\n", // 10
+            "2017/12/19 Tue | Work 10:00:00 18:25:00\n", // 8;25
+            "2017/12/20 Wed | Work 09:00:00 16:00:00\n", // 7
+            "2017/12/21 Thu | Work 10:00:00 17:00:00\n", // 7
+            "2017/12/22 Fri | Work 07:00:00 18:00:00\n", // 11
+            // => 43;25
+            "2017/12/25 Mon | Work 08:00:00 16:00:00\n", // 8
+            "2017/12/26 Tue | Work 09:00:00 16:00:00\n", // 7
+            "2017/12/27 Wed | Work 08:00:00 16:00:00\n", // 8
+            "2017/12/28 Thu | Work 10:00:00 18:00:00\n", // 8
+            "2017/12/29 Fri | Work 08:00:00 16:00:00\n", // 8
+            // => 39
+            "2018/01/01 Mon | Work 08:00:00 16:00:00\n"];
 
-        let s = format!("{}\n{}\n{}\n{}\n{}",
-                        mon_1, tue_1, wed_1, thu_1, fri_1);
+        let mut s = String::new();
+        for d in days.into_iter() {
+            s.push_str(d);
+        }
 
         let mut logger = TimeLogger{file_path: PathBuf::new(), date2logday: HashMap::new()};
         logger.read_entries(s.as_str()).unwrap();
 
-        let mon = NaiveDate::from_ymd(2017,12,18);
-        let tue = NaiveDate::from_ymd(2017,12,19);
-        let wed = NaiveDate::from_ymd(2017,12,20);
-        let thu = NaiveDate::from_ymd(2017,12,21);
-        let fri = NaiveDate::from_ymd(2017,12,22);
-        let sat = NaiveDate::from_ymd(2017,12,23);
+        let mon1 = NaiveDate::from_ymd(2017,12,18);
+        let mon2 = NaiveDate::from_ymd(2017,12,25);
+        let mon3 = NaiveDate::from_ymd(2018,01,01);
+        let tue3 = NaiveDate::from_ymd(2018,01,02);
 
-        assert_eq!(logger.flextime_as_of(mon), Duration::hours(0));
-        assert_eq!(logger.flextime_as_of(tue), Duration::hours(0));
-        assert_eq!(logger.flextime_as_of(wed), Duration::hours(1));
-        assert_eq!(logger.flextime_as_of(thu), Duration::hours(1));
-        assert_eq!(logger.flextime_as_of(fri), Duration::hours(2));
-        assert_eq!(logger.flextime_as_of(sat), Duration::minutes(60 + 15));
-
+        assert_eq!(logger.flextime_as_of(mon1),  Duration::minutes(2*60 + 25));
+        assert_eq!(logger.flextime_as_of(mon2),  -Duration::minutes(60));
+        assert_eq!(logger.flextime_as_of(mon3),  Duration::minutes(0));
+        assert_eq!(logger.flextime_as_of(tue3),  Duration::minutes(0));
     }
-*/
+
     #[test]
     fn timelogger_consistent_serialization() {
         let nov_mon_1 = "2017/11/13 Mon | Work 08:00:00 18:00:00";
