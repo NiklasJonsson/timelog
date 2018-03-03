@@ -21,6 +21,7 @@ Usage:
   timelog start [<time>]
   timelog end [<time>]
   timelog month
+  timelog week [--with <time>]
   timelog week [--last]
   timelog day [--with <time>]
   timelog day [--last]
@@ -87,14 +88,22 @@ fn get_date_for_day_cmd(args: &Args) -> NaiveDate {
         target = Weekday::Fri;
     } else if args.flag_last {
         target = date.pred().weekday();
-    } else {
-        debug_assert!(!args.flag_last
-                      || !args.flag_mon
-                      || !args.flag_tue
-                      || !args.flag_wed
-                      || !args.flag_thu);
+    };
 
+    while date.weekday() != target {
+        date = date.pred();
     }
+
+    return date;
+}
+
+fn get_date_for_week_cmd(args: &Args) -> NaiveDate {
+    let mut date = Local::today().naive_local();
+    let target = date.weekday();
+    if args.flag_last {
+        date = date.pred();
+    }
+
     while date.weekday() != target {
         date = date.pred();
     }
@@ -136,40 +145,41 @@ fn real_main() -> i32 {
     } else if args.cmd_month {
         println!("{} hrs left of {} this month", tl.hours_left_this_month(), tl.total_hours_this_month());
     } else if args.cmd_week {
-        if args.flag_last {
-            let mut date = Local::today().naive_local().pred();
-            while date.weekday() != Weekday::Sun {
-                date = date.pred();
-            }
-            let time = match tl.time_worked_in_week_of(date) {
-                Ok(t) => t,
-                Err(e) => {
-                    println!("Error: {}", e);
-                    return 1;
-                },
-            };
-            println!("{} worked last week", fmt_dur(time));
-        } else {
-            let (time_left, flex) = match tl.time_left_this_week() {
-                Ok(x) => x,
-                Err(e) => {
-                    println!("Couldn't calculate time left this week: {}", e);
-                    return 1;
-                },
-            };
-            let time_worked = match tl.time_worked_this_week() {
-                Ok(x) => x,
-                Err(e) => {
-                    println!("Couldn't calculate time worked this week: {}", e);
-                    return 1;
-                },
-            };
+        let date = get_date_for_week_cmd(&args);
+        let time  = match get_time(args.flag_with) {
+            Ok(t) => t,
+            Err(e) => {
+                println!("Unable to parse args: {}", e);
+                return 1;
+            },
+        };
 
-            println!("{} worked this week\n{} left this week ({} of which is flex)",
-            fmt_dur(time_worked),
-            fmt_dur(time_left),
-            fmt_dur(flex));
-        }
+        let this_week = !args.flag_last;
+
+        let time_opt = match this_week {
+            true => Some(time),
+            false => None,
+        };
+
+        let (time_left, flex) = match tl.time_left_in_week_of_with(date, time_opt) {
+            Ok(x) => x,
+            Err(e) => {
+                println!("Couldn't calculate time left this week: {}", e);
+                return 1;
+            },
+        };
+        let time_worked = match tl.time_worked_in_week_of_with(date, time_opt) {
+            Ok(x) => x,
+            Err(e) => {
+                println!("Couldn't calculate time worked this week: {}", e);
+                return 1;
+            },
+        };
+
+        println!("{} worked this week\n{} left this week ({} of which is flex)",
+        fmt_dur(time_worked),
+        fmt_dur(time_left),
+        fmt_dur(flex));
     } else if args.cmd_day {
         let date = get_date_for_day_cmd(&args);
         let today = !(args.flag_last || args.flag_mon || args.flag_tue || args.flag_wed || args.flag_thu || args.flag_fri);

@@ -341,8 +341,11 @@ impl TimeLogDay {
     gen_set!(set_end, end, set_end, TimeLogEntry::end);
     gen_set!(set_start, start, set_start, TimeLogEntry::start);
 
-    pub fn time_logged_with(&self, end: NaiveTime, etype: TimeLogEntryType) -> TimeLogResult<Duration> {
+    pub fn time_logged_with(&self, with: Option<NaiveTime>, etype: TimeLogEntryType) -> TimeLogResult<Duration> {
         let mut dur = self.logged_time(etype);
+        if with.is_none() {
+            return Ok(dur);
+        }
 
         if self.entries.len() == 0 {
             return Err(TimeLogError::inv_inp("No entries today"));
@@ -352,6 +355,7 @@ impl TimeLogDay {
 
         // If we find an an entry with Some, None then we use end to add extra time to dur
         let mut found = false;
+        let end = with.unwrap();
         for e in &self.entries {
             if e.start.is_some() && e.end.is_none() && e.entry_type == etype {
                 debug_assert!(e.start.unwrap() <= end);
@@ -359,7 +363,7 @@ impl TimeLogDay {
                     dur = dur + end.signed_duration_since(e.start.unwrap());
                     found = true;
                 } else {
-                    println!("More than one entry with undefined end at: {}", self.date);
+                    println!("WARNING: More than one entry with undefined end at: {}", self.date);
                 }
             }
         }
@@ -688,6 +692,6 @@ mod tests {
 
         let day: TimeLogDay = s.as_str().parse().unwrap();
         let etype = TimeLogEntryType::Work;
-        assert_eq!(day.time_logged_with(NaiveTime::from_hms(8,0,0), etype), Ok(Duration::minutes(89)));
+        assert_eq!(day.time_logged_with(Some(NaiveTime::from_hms(8,0,0)), etype), Ok(Duration::minutes(89)));
     }
 }
