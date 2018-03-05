@@ -20,7 +20,7 @@ Timelog - log time
 Usage:
   timelog start [<time>]
   timelog end [<time>]
-  timelog month
+  timelog month [--with <time>]
   timelog week [--with <time>]
   timelog week [--last]
   timelog day [--with <time>]
@@ -111,6 +111,14 @@ fn get_date_for_week_cmd(args: &Args) -> NaiveDate {
     return date;
 }
 
+fn get_date_for_month_cmd(args: &Args) -> NaiveDate {
+    let today = Local::today().naive_local();
+    match args.flag_last {
+        false => today,
+        true => NaiveDate::from_ymd(today.year(), today.month(), 1).pred()
+    }
+}
+
 fn real_main() -> i32 {
     let args: Args = Docopt::new(USAGE)
         .and_then(|d| d.deserialize())
@@ -143,7 +151,40 @@ fn real_main() -> i32 {
         };
         tl.log_end(Local::today().naive_local(), time);
     } else if args.cmd_month {
-        println!("{} hrs left of {} this month", tl.hours_left_this_month(), tl.total_hours_this_month());
+        let date = get_date_for_month_cmd(&args);
+        let time  = match get_time(args.flag_with) {
+            Ok(t) => t,
+            Err(e) => {
+                println!("Unable to parse args: {}", e);
+                return 1;
+            },
+        };
+
+        let this_month = !args.flag_last;
+
+        let time_opt = match this_month {
+            true => Some(time),
+            false => None,
+        };
+
+        let (time_left, _) = match tl.time_left_in_month_of_with(date, time_opt) {
+            Ok(x) => x,
+            Err(e) => {
+                println!("Couldn't calculate time left this week: {}", e);
+                return 1;
+            },
+        };
+        let time_worked = match tl.time_logged_in_month_of_with(date, time_opt) {
+            Ok(x) => x,
+            Err(e) => {
+                println!("Couldn't calculate time worked this week: {}", e);
+                return 1;
+            },
+        };
+
+        println!("{} worked this month\n{} left this month",
+        fmt_dur(time_worked),
+        fmt_dur(time_left));
     } else if args.cmd_week {
         let date = get_date_for_week_cmd(&args);
         let time  = match get_time(args.flag_with) {
@@ -168,7 +209,7 @@ fn real_main() -> i32 {
                 return 1;
             },
         };
-        let time_worked = match tl.time_worked_in_week_of_with(date, time_opt) {
+        let time_worked = match tl.time_logged_in_week_of_with(date, time_opt) {
             Ok(x) => x,
             Err(e) => {
                 println!("Couldn't calculate time worked this week: {}", e);
@@ -197,7 +238,7 @@ fn real_main() -> i32 {
             false => None,
         };
 
-        let worked_time = match tl.time_worked_at_date_with(date, time_opt) {
+        let worked_time = match tl.time_logged_at_date_with(date, time_opt) {
             Ok(x) => x,
             Err(e) => {
                 println!("Couldn't calculate time worked today: {}", e);
