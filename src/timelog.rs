@@ -282,7 +282,7 @@ macro_rules! gen_set {
             debug_assert!(self.validate_ordering());
             debug_assert!(time.nanosecond() == 0);
             let mut found = false;
-            for mut entry in &mut self.entries {
+            for entry in &mut self.entries {
                 if entry.$entry_field.is_none() && entry.entry_type == entry_type {
                     if found {
                         println!("WARN: Found more than one UNDEF this day");
@@ -370,7 +370,7 @@ impl TimeLogDay {
         return Ok(dur);
     }
 
-    pub fn loggable_time(&self, etype: TimeLogEntryType) -> Duration {
+    pub fn loggable_time(&self, _etype: TimeLogEntryType) -> Duration {
         if is_weekday(self.date) {
             Duration::hours(8)
         } else {

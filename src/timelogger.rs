@@ -162,7 +162,7 @@ impl TimeLogger {
             let tle: TimeLogEntry = line.parse()?;
             let date = tle.get_date();
 
-            let mut tld = match self.date2logday.entry(date) {
+            let tld = match self.date2logday.entry(date) {
                 Vacant(entry) => entry.insert(TimeLogDay::empty(date)),
                 Occupied(entry) => entry.into_mut(),
             };
