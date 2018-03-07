@@ -102,43 +102,43 @@ macro_rules! gen_log {
 }
 
 macro_rules! gen_time_logged_in_timeperiod_with {
-	($fname: ident, $start_date_f: ident, $end_date_f: ident) => {
-		pub fn $fname(&self, date: NaiveDate, with: Option<NaiveTime>) -> TimeLogResult<Duration> {
-			let start_date = $start_date_f(date);
-			let end_date = $end_date_f(date);
-			let logged_time = TimeLogEntryType::iterator()
-				.map(|x| self.compute_logged_time_between(start_date, end_date, *x))
-				.fold(Duration::hours(0), |acc, e| acc + e);
+    ($fname: ident, $start_date_f: ident, $end_date_f: ident) => {
+        pub fn $fname(&self, date: NaiveDate, with: Option<NaiveTime>) -> TimeLogResult<Duration> {
+            let start_date = $start_date_f(date);
+            let end_date = $end_date_f(date);
+            let logged_time = TimeLogEntryType::iterator()
+                .map(|x| self.compute_logged_time_between(start_date, end_date, *x))
+                .fold(Duration::hours(0), |acc, e| acc + e);
 
-			match with {
-				None => { return Ok(logged_time); },
-				Some(_) => {
-					let mut last_date_with_entries = start_date;
-					while self.date2logday.get(&last_date_with_entries.succ()).is_some() && last_date_with_entries != end_date {
-						last_date_with_entries = last_date_with_entries.succ();
-					}
+            match with {
+                None => { return Ok(logged_time); },
+                Some(_) => {
+                    let mut last_date_with_entries = start_date;
+                    while self.date2logday.get(&last_date_with_entries.succ()).is_some() && last_date_with_entries != end_date {
+                        last_date_with_entries = last_date_with_entries.succ();
+                    }
 
-					let work_et = TimeLogEntryType::Work;
-					let ref last_tld = self.date2logday[&last_date_with_entries];
-					let last_tld_logged = last_tld.logged_time(work_et);
-					let last_tld_logged_with = last_tld.time_logged_with(with, work_et)?;
-					return Ok(logged_time - last_tld_logged + last_tld_logged_with);
-				}
-			}
-		}
-	}
+                    let work_et = TimeLogEntryType::Work;
+                    let ref last_tld = self.date2logday[&last_date_with_entries];
+                    let last_tld_logged = last_tld.logged_time(work_et);
+                    let last_tld_logged_with = last_tld.time_logged_with(with, work_et)?;
+                    return Ok(logged_time - last_tld_logged + last_tld_logged_with);
+                }
+            }
+        }
+    }
 }
 
 macro_rules! gen_time_left_in_timeperiod_with {
     ($fname: ident, $loggable_f: ident, $logged_f: ident) => {
-    pub fn $fname(&self, date: NaiveDate, with: Option<NaiveTime>) -> TimeLogResult<(Duration, Duration)> {
-        let etype = TimeLogEntryType::Work;
-        let workable_time = self.$loggable_f(date, etype);
-        let logged_time = self.$logged_f(date, with)?;
-        let flex_time = self.flextime_as_of(date);
-        return Ok((workable_time - logged_time + flex_time, flex_time));
-		}
-	}
+        pub fn $fname(&self, date: NaiveDate, with: Option<NaiveTime>) -> TimeLogResult<(Duration, Duration)> {
+            let etype = TimeLogEntryType::Work;
+            let workable_time = self.$loggable_f(date, etype);
+            let logged_time = self.$logged_f(date, with)?;
+            let flex_time = self.flextime_as_of(date);
+            return Ok((workable_time - logged_time + flex_time, flex_time));
+        }
+    }
 }
 
 const TIMELOGGER_FILE: &str = ".timelog";
@@ -199,9 +199,9 @@ impl TimeLogger {
     gen_time_between!(compute_loggable_time_between, loggable_time, 8);
 
     gen_x_in_y_of!(compute_loggable_time_in_month_of, compute_loggable_time_between,
-                  get_first_day_in_month_of, get_last_day_in_month_of);
+                   get_first_day_in_month_of, get_last_day_in_month_of);
     gen_x_in_y_of!(compute_loggable_time_in_week_of, compute_loggable_time_between,
-                  get_monday_in_week_of, get_friday_in_week_of);
+                   get_monday_in_week_of, get_friday_in_week_of);
 
     gen_log!(log_start, set_start);
     gen_log!(log_end, set_end);
@@ -215,12 +215,12 @@ impl TimeLogger {
         }
 
         let mut sunday_last_week = match date.weekday() {
-           Weekday::Sun =>  date.pred(),
-           _ =>  date,
+            Weekday::Sun =>  date.pred(),
+            _ =>  date,
         };
 
         while sunday_last_week.weekday() != Weekday::Sun {
-          sunday_last_week = sunday_last_week.pred();
+            sunday_last_week = sunday_last_week.pred();
         }
 
         debug_assert!(sunday_last_week > *keys[0]);
@@ -246,11 +246,11 @@ impl TimeLogger {
         return tld.time_logged_with(with, etype);
     }
 
-	gen_time_logged_in_timeperiod_with!(time_logged_in_week_of_with, get_monday_in_week_of, get_friday_in_week_of);
-	gen_time_logged_in_timeperiod_with!(time_logged_in_month_of_with, get_first_day_in_month_of, get_last_day_in_month_of);
+    gen_time_logged_in_timeperiod_with!(time_logged_in_week_of_with, get_monday_in_week_of, get_friday_in_week_of);
+    gen_time_logged_in_timeperiod_with!(time_logged_in_month_of_with, get_first_day_in_month_of, get_last_day_in_month_of);
 
-	gen_time_left_in_timeperiod_with!(time_left_in_week_of_with, compute_loggable_time_in_week_of, time_logged_in_week_of_with);
-	gen_time_left_in_timeperiod_with!(time_left_in_month_of_with, compute_loggable_time_in_month_of, time_logged_in_month_of_with);
+    gen_time_left_in_timeperiod_with!(time_left_in_week_of_with, compute_loggable_time_in_week_of, time_logged_in_week_of_with);
+    gen_time_left_in_timeperiod_with!(time_left_in_month_of_with, compute_loggable_time_in_month_of, time_logged_in_month_of_with);
 
     pub fn save(&self) -> TimeLogResult<()> {
         let mut bkp = self.file_path.clone();
@@ -281,7 +281,7 @@ impl TimeLogger {
 
         for (i,k) in keys.iter().rev().enumerate() {
             if i >= n {
-              break;
+                break;
             }
             days.push(&self.date2logday[k]);
         }

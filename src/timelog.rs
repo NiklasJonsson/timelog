@@ -109,9 +109,9 @@ pub enum TimeLogEntryType {
 impl TimeLogEntryType {
     pub fn iterator() -> Iter<'static, TimeLogEntryType> {
         static ETYPES: [TimeLogEntryType; 4] = [TimeLogEntryType::Work,
-                                                TimeLogEntryType::Sickness,
-                                                TimeLogEntryType::Vacation,
-                                                TimeLogEntryType::ParentalLeave];
+        TimeLogEntryType::Sickness,
+        TimeLogEntryType::Vacation,
+        TimeLogEntryType::ParentalLeave];
         ETYPES.into_iter()
     }
 }
@@ -148,16 +148,11 @@ impl Ord for TimeLogEntry {
     fn cmp(&self, other: &TimeLogEntry) -> Ordering {
         match (self.start, self.end, self.entry_type, self.date,
                other.start, other.end, other.entry_type, other.date) {
-            (_,Some(end),_,_,
-             Some(start),_,_,_)   => end.cmp(&start),
-            (Some(start),_,_,_,
-             _,Some(end),_,_)     => start.cmp(&end),
-            (Some(start0),_,_,_,
-             Some(start1),_,_,_)    => start0.cmp(&start1),
-            (_,Some(end0),_,_,
-             _,Some(end1),_,_)    => end0.cmp(&end1),
-            (_,_,et0,_,
-             _,_,et1,_)            => et0.cmp(&et1),
+            (_,Some(end),_,_,Some(start),_,_,_) => end.cmp(&start),
+            (Some(start),_,_,_,_,Some(end),_,_) => start.cmp(&end),
+            (Some(start0),_,_,_,Some(start1),_,_,_) => start0.cmp(&start1),
+            (_,Some(end0),_,_,_,Some(end1),_,_) => end0.cmp(&end1),
+            (_,_,et0,_,_,_,et1,_) => et0.cmp(&et1),
         }
     }
 }
@@ -385,10 +380,10 @@ impl TimeLogDay {
             debug_assert!(is_weekday(self.date));
             if e.entry_type == etype {
                 if etype == TimeLogEntryType::Work {
-                  if let (Some(start), Some(end)) = (e.start, e.end) {
-                      debug_assert!(e.start < e.end);
-                      sum = sum + end.signed_duration_since(start);
-                  }
+                    if let (Some(start), Some(end)) = (e.start, e.end) {
+                        debug_assert!(e.start < e.end);
+                        sum = sum + end.signed_duration_since(start);
+                    }
                 } else {
                     sum = sum + Duration::hours(8);
                 }

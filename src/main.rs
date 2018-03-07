@@ -152,11 +152,11 @@ fn real_main() -> i32 {
         .unwrap_or_else(|e| e.exit());
 
     let mut tl = match TimeLogger::default() {
-      Ok(x) => x,
-      Err(e) => {
-        println!("ERROR: Could not create Timelogger instance: {}", e);
-        return 1;
-      }
+        Ok(x) => x,
+        Err(e) => {
+            println!("ERROR: Could not create Timelogger instance: {}", e);
+            return 1;
+        }
     };
 
     if args.cmd_start {
@@ -210,8 +210,8 @@ fn real_main() -> i32 {
         };
 
         println!("{} worked this month\n{} left this month",
-        fmt_dur(time_worked),
-        fmt_dur(time_left));
+                 fmt_dur(time_worked),
+                 fmt_dur(time_left));
     } else if args.cmd_week {
         let date = get_date_for_week_cmd(&args);
         let week_text_fmt = get_text_for_monthweek_cmd(&args);
@@ -301,8 +301,8 @@ fn main() {
 
 #[cfg(test)]
 mod main_tests {
-use chrono::NaiveTime;
-use super::*;
+    use chrono::NaiveTime;
+    use super::*;
     #[test]
     fn parse_time() {
         assert_eq!(parse_time_arg(&String::from("03:00")), Ok(NaiveTime::from_hms(3,0,0)));
