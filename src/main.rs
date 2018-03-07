@@ -188,6 +188,13 @@ fn real_main() -> i32 {
         };
 
         let this_month = !args.flag_last;
+        if !this_month {
+            if let Some(bad_entries) = tl.verify_entries_in_month_of(date) {
+                for e in bad_entries {
+                    println!("Incomplete entry: {}", e);
+                }
+            }
+        }
 
         let time_opt = match this_month {
             true => Some(time),
@@ -224,6 +231,13 @@ fn real_main() -> i32 {
         };
 
         let this_week = !args.flag_last;
+        if !this_week {
+            if let Some(bad_entries) = tl.verify_entries_in_week_of(date) {
+                for e in bad_entries {
+                    println!("Incomplete entry: {}", e);
+                }
+            }
+        }
 
         let time_opt = match this_week {
             true => Some(time),

@@ -391,6 +391,12 @@ impl TimeLogDay {
 
         return sum;
     }
+
+    pub fn has_unfinished_entries(&self) -> bool {
+        self.entries.iter().any(|&e|
+                          e.entry_type == TimeLogEntryType::Work && (e.start.is_none() || e.end.is_none())
+                          || (e.start.is_some() && e.end.is_none() || e.start.is_none() && e.end.is_some()))
+    }
 }
 
 impl Display for TimeLogDay {

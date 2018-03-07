@@ -135,6 +135,31 @@ macro_rules! gen_time_left_in_timeperiod_with {
     }
 }
 
+macro_rules! gen_verify_entries {
+    ($fname: ident, $start_date: ident, $end_date: ident) => {
+        pub fn $fname(&self, date: NaiveDate) -> Option<Vec<NaiveDate>> {
+            let start_date = $start_date(date);
+            let end_date = $end_date(date);
+            let mut cur = start_date;
+
+            let mut bad_entries = Vec::new();
+            while cur != end_date {
+                if let Some(tld) = self.date2logday.get(&cur) {
+                    if tld.has_unfinished_entries() {
+                        bad_entries.push(cur);
+                    }
+                }
+                cur = cur.succ();
+            }
+
+            return match bad_entries.is_empty() {
+                true => None,
+                false => Some(bad_entries)
+            };
+        }
+    }
+}
+
 const TIMELOGGER_FILE: &str = ".timelog";
 impl TimeLogger {
 
@@ -285,6 +310,8 @@ impl TimeLogger {
         return days;
     }
 
+    gen_verify_entries!(verify_entries_in_month_of, get_first_day_in_month_of, get_last_day_in_month_of);
+    gen_verify_entries!(verify_entries_in_week_of, get_monday_in_week_of, get_sunday_in_week_of);
 }
 
 #[cfg(test)]
