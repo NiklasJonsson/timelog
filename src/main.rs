@@ -58,8 +58,8 @@ fn parse_time_arg(s: &String) -> ParseResult<NaiveTime> {
     // %H: hour, two digits
     // %M: minute, two digits
     NaiveTime::parse_from_str(s, "%R")
-    .or(NaiveTime::parse_from_str(s, "%H.%M"))
-    .or(NaiveTime::parse_from_str(s, "%H"))
+        .or(NaiveTime::parse_from_str(s, "%H.%M"))
+        .or(NaiveTime::parse_from_str(s, "%H"))
 }
 
 fn get_time(s: Option<String>) -> ParseResult<NaiveTime> {
@@ -95,6 +95,33 @@ fn get_date_for_day_cmd(args: &Args) -> NaiveDate {
     }
 
     return date;
+}
+
+fn get_text_for_day_cmd(args: &Args) -> String {
+    let ret: &str;
+    if args.flag_mon {
+        ret = "last monday";
+    } else if args.flag_tue {
+        ret = "last tuesday";
+    } else if args.flag_wed {
+        ret = "last wednesday";
+    } else if args.flag_thu {
+        ret = "last thursday";
+    } else if args.flag_fri {
+        ret = "last friday";
+    } else if args.flag_last {
+        ret = "yesterday"
+    } else {
+        ret = "today";
+    }
+    return ret.to_string();
+}
+
+fn get_text_for_monthweek_cmd(args: &Args) -> String {
+    match args.flag_last {
+        true => "last",
+        false => "this"
+    }.to_string()
 }
 
 fn get_date_for_week_cmd(args: &Args) -> NaiveDate {
@@ -187,6 +214,7 @@ fn real_main() -> i32 {
         fmt_dur(time_left));
     } else if args.cmd_week {
         let date = get_date_for_week_cmd(&args);
+        let week_text_fmt = get_text_for_monthweek_cmd(&args);
         let time  = match get_time(args.flag_with) {
             Ok(t) => t,
             Err(e) => {
@@ -205,24 +233,26 @@ fn real_main() -> i32 {
         let (time_left, flex) = match tl.time_left_in_week_of_with(date, time_opt) {
             Ok(x) => x,
             Err(e) => {
-                println!("Couldn't calculate time left this week: {}", e);
+                println!("Couldn't calculate time left {} week: {}", week_text_fmt, e);
                 return 1;
             },
         };
         let time_worked = match tl.time_logged_in_week_of_with(date, time_opt) {
             Ok(x) => x,
             Err(e) => {
-                println!("Couldn't calculate time worked this week: {}", e);
+                println!("Couldn't calculate time worked {} week: {}", week_text_fmt, e);
                 return 1;
             },
         };
 
-        println!("{} worked this week\n{} left this week ({} of which is flex)",
+        println!("{0} worked {3} week\n{1} left {3} week ({2} of which is flex)",
         fmt_dur(time_worked),
         fmt_dur(time_left),
-        fmt_dur(flex));
+        fmt_dur(flex),
+        week_text_fmt);
     } else if args.cmd_day {
         let date = get_date_for_day_cmd(&args);
+        let day_text_fmt = get_text_for_day_cmd(&args);
         let today = !(args.flag_last || args.flag_mon || args.flag_tue || args.flag_wed || args.flag_thu || args.flag_fri);
 
         let time  = match get_time(args.flag_with) {
@@ -241,11 +271,11 @@ fn real_main() -> i32 {
         let worked_time = match tl.time_logged_at_date_with(date, time_opt) {
             Ok(x) => x,
             Err(e) => {
-                println!("Couldn't calculate time worked today: {}", e);
+                println!("Couldn't calculate time worked {}: {}", day_text_fmt, e);
                 return 1;
             }
         };
-        println!("{} worked today", fmt_dur(worked_time));
+        println!("{} worked {}", fmt_dur(worked_time), day_text_fmt);
     } else if args.cmd_view {
         debug_assert!(args.arg_n_entries.is_some());
         for tld in tl.get_latest_n_entries(args.arg_n_entries.unwrap()) {
