@@ -19,27 +19,21 @@ use chrono::prelude::*;
 const MONTH_2_NDAYS: [u32; 12] = [31,28,31,30,31,30,31,31,30,31,30,31];
 
 fn get_monday_in_week_of(date: NaiveDate) -> NaiveDate {
-    let mut first_day = date;
-    while first_day.weekday() != Weekday::Mon {
-        first_day = first_day.pred();
+    let mut monday = date;
+    while monday.weekday() != Weekday::Mon {
+        monday = monday.pred();
     }
 
-    return first_day;
+    return monday;
 }
 
-fn get_friday_in_week_of(date: NaiveDate) -> NaiveDate {
-    let mut friday = date;
-    if date.weekday() == Weekday::Sat || date.weekday() == Weekday::Sun {
-        while friday.weekday() != Weekday::Fri {
-            friday = friday.pred();
-        }
-    } else {
-        while friday.weekday() != Weekday::Fri {
-            friday = friday.succ();
-        }
+fn get_sunday_in_week_of(date: NaiveDate) -> NaiveDate {
+    let mut sunday = date;
+    while sunday.weekday() != Weekday::Sun {
+        sunday = sunday.succ();
     }
 
-    return friday;
+    return sunday;
 }
 
 fn get_first_day_in_month_of(date: NaiveDate) -> NaiveDate {
@@ -201,7 +195,7 @@ impl TimeLogger {
     gen_x_in_y_of!(compute_loggable_time_in_month_of, compute_loggable_time_between,
                    get_first_day_in_month_of, get_last_day_in_month_of);
     gen_x_in_y_of!(compute_loggable_time_in_week_of, compute_loggable_time_between,
-                   get_monday_in_week_of, get_friday_in_week_of);
+                   get_monday_in_week_of, get_sunday_in_week_of);
 
     gen_log!(log_start, set_start);
     gen_log!(log_end, set_end);
@@ -246,7 +240,7 @@ impl TimeLogger {
         return tld.time_logged_with(with, etype);
     }
 
-    gen_time_logged_in_timeperiod_with!(time_logged_in_week_of_with, get_monday_in_week_of, get_friday_in_week_of);
+    gen_time_logged_in_timeperiod_with!(time_logged_in_week_of_with, get_monday_in_week_of, get_sunday_in_week_of);
     gen_time_logged_in_timeperiod_with!(time_logged_in_month_of_with, get_first_day_in_month_of, get_last_day_in_month_of);
 
     gen_time_left_in_timeperiod_with!(time_left_in_week_of_with, compute_loggable_time_in_week_of, time_logged_in_week_of_with);

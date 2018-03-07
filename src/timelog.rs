@@ -377,7 +377,6 @@ impl TimeLogDay {
         debug_assert!(self.validate_ordering());
         let mut sum = Duration::seconds(0);
         for e in &self.entries {
-            debug_assert!(is_weekday(self.date));
             if e.entry_type == etype {
                 if etype == TimeLogEntryType::Work {
                     if let (Some(start), Some(end)) = (e.start, e.end) {
