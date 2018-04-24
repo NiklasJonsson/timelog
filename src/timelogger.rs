@@ -242,7 +242,10 @@ impl TimeLogger {
             sunday_last_week = sunday_last_week.pred();
         }
 
-        debug_assert!(sunday_last_week > *keys[0]);
+        if sunday_last_week <= *keys[0] {
+            // If this is true, we have no entries to calculate flex time for
+            return Duration::hours(0);
+        }
 
         let start_date = *keys[0];
         let end_date = sunday_last_week;

@@ -301,6 +301,20 @@ pub fn is_weekday(date: NaiveDate) -> bool {
     date.weekday() != Weekday::Sat && date.weekday() != Weekday::Sun
 }
 
+
+fn is_workday(date: NaiveDate) -> bool {
+    if !is_weekday(date) {
+        return false;
+    }
+    let holidays: Vec<NaiveDate> = vec![
+        NaiveDate::from_ymd(2018, 03, 29),
+        NaiveDate::from_ymd(2018, 03, 30),
+        NaiveDate::from_ymd(2018, 04, 2),
+    ];
+
+    return !holidays.iter().any(|hd| hd == &date);
+}
+
 impl TimeLogDay {
     fn validate_ordering(&self) -> bool {
         for i in 0..self.entries.len() {
@@ -366,7 +380,7 @@ impl TimeLogDay {
     }
 
     pub fn loggable_time(&self, _etype: TimeLogEntryType) -> Duration {
-        if is_weekday(self.date) {
+        if is_workday(self.date) {
             Duration::hours(8)
         } else {
             Duration::hours(0)
