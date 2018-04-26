@@ -101,6 +101,7 @@ impl From<std::num::ParseIntError> for TimeLogError {
 #[derive(Debug, Copy, Clone, PartialEq, PartialOrd, Eq, Ord)]
 pub enum TimeLogEntryType {
     Work,
+    Holiday,
     Sickness,
     Vacation,
     ParentalLeave,
@@ -108,10 +109,11 @@ pub enum TimeLogEntryType {
 
 impl TimeLogEntryType {
     pub fn iterator() -> Iter<'static, TimeLogEntryType> {
-        static ETYPES: [TimeLogEntryType; 4] = [TimeLogEntryType::Work,
+        static ETYPES: [TimeLogEntryType; 5] = [TimeLogEntryType::Work,
         TimeLogEntryType::Sickness,
         TimeLogEntryType::Vacation,
-        TimeLogEntryType::ParentalLeave];
+        TimeLogEntryType::ParentalLeave,
+        TimeLogEntryType::Holiday];
         ETYPES.into_iter()
     }
 }
@@ -131,6 +133,7 @@ impl FromStr for TimeLogEntryType {
             "ParentalLeave" => Ok(TimeLogEntryType::ParentalLeave),
             "Vacation" => Ok(TimeLogEntryType::Vacation),
             "Sickness" => Ok(TimeLogEntryType::Sickness),
+            "Holiday" => Ok(TimeLogEntryType::Holiday),
             _ => return Err(TimeLogError::parse_error(format!("Can't parse: {} as TimeLogEntryType", s))),
         }
     }
@@ -303,16 +306,7 @@ pub fn is_weekday(date: NaiveDate) -> bool {
 
 
 fn is_workday(date: NaiveDate) -> bool {
-    if !is_weekday(date) {
-        return false;
-    }
-    let holidays: Vec<NaiveDate> = vec![
-        NaiveDate::from_ymd(2018, 03, 29),
-        NaiveDate::from_ymd(2018, 03, 30),
-        NaiveDate::from_ymd(2018, 04, 2),
-    ];
-
-    return !holidays.iter().any(|hd| hd == &date);
+    return is_weekday(date);
 }
 
 impl TimeLogDay {
