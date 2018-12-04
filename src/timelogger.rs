@@ -50,7 +50,7 @@ pub struct TimeLogger {
 }
 
 macro_rules! gen_time_between {
-    ($func: ident, $logday_getter: ident, $default_hrs: expr) => {
+    ($func: ident, $logday_getter: ident, $default_hrs: expr, $allow_weekend: expr) => {
         fn $func(&self, day1: NaiveDate, day2: NaiveDate, etype: TimeLogEntryType) -> Duration {
             if day1 > day2 {
                 return Duration::seconds(0);
@@ -59,7 +59,7 @@ macro_rules! gen_time_between {
             let mut date = day1;
             let mut sum = Duration::seconds(0);
             while date <= day2 {
-                if is_weekday(date) {
+                if $allow_weekend || is_weekday(date) {
                     sum = sum + self.date2logday.get(&date).map(|x| x.$logday_getter(etype)).unwrap_or(Duration::hours($default_hrs));
                 }
                 date = date.succ();
@@ -214,8 +214,8 @@ impl TimeLogger {
         TimeLogger::from_file(path_buf)
     }
 
-    gen_time_between!(compute_logged_time_between, logged_time, 0);
-    gen_time_between!(compute_loggable_time_between, loggable_time, 8);
+    gen_time_between!(compute_logged_time_between, logged_time, 0, true);
+    gen_time_between!(compute_loggable_time_between, loggable_time, 8, false);
 
     gen_x_in_y_of!(compute_loggable_time_in_month_of, compute_loggable_time_between,
                    get_first_day_in_month_of, get_last_day_in_month_of);
@@ -233,22 +233,22 @@ impl TimeLogger {
             return Duration::hours(0);
         }
 
-        let mut sunday_last_week = match date.weekday() {
-            Weekday::Sun =>  date.pred(),
-            _ =>  date,
+        let mut prev_week_sunday = match date.weekday() {
+            Weekday::Sun => date.pred(),
+            _ => date,
         };
 
-        while sunday_last_week.weekday() != Weekday::Sun {
-            sunday_last_week = sunday_last_week.pred();
+        while prev_week_sunday.weekday() != Weekday::Sun {
+            prev_week_sunday = prev_week_sunday.pred();
         }
 
-        if sunday_last_week <= *keys[0] {
+        if prev_week_sunday <= *keys[0] {
             // If this is true, we have no entries to calculate flex time for
             return Duration::hours(0);
         }
 
         let start_date = *keys[0];
-        let end_date = sunday_last_week;
+        let end_date = prev_week_sunday;
         let logged_time = TimeLogEntryType::iterator()
             .map(|x| self.compute_logged_time_between(start_date, end_date, *x))
             .fold(Duration::hours(0), |acc, e| acc + e);
@@ -544,6 +544,30 @@ mod tests {
         assert_eq!(logger.flextime_as_of(mon3),  Duration::minutes(0));
         assert_eq!(logger.flextime_as_of(tue3),  Duration::minutes(0));
     }
+
+    #[test]
+    fn timelogger_flex_time_weekend() {
+        let days = ["2017/12/11 Mon | Work 08:00:00 16:00:00\n", // 8
+            "2017/12/12 Tue | Work 09:00:00 17:00:00\n", // 8
+            "2017/12/13 Wed | Work 08:00:00 16:00:00\n", // 8
+            "2017/12/14 Thu | Work 10:00:00 18:00:00\n", // 8
+            "2017/12/15 Fri | Work 08:00:00 16:00:00\n", // 8
+            "2017/12/16 Sat | Work 12:00:00 13:00:00\n", // 1
+            "2017/12/17 Sun | Work 12:00:00 12:35:00\n"]; // 0.35
+
+        let mut s = String::new();
+        for d in days.into_iter() {
+            s.push_str(d);
+        }
+
+        let mut logger = TimeLogger{file_path: PathBuf::new(), date2logday: HashMap::new()};
+        logger.read_entries(s.as_str()).unwrap();
+
+        let mon = NaiveDate::from_ymd(2017,12,18);
+
+        assert_eq!(logger.flextime_as_of(mon),  -Duration::minutes(60 + 35));
+    }
+  
 
     #[test]
     fn timelogger_consistent_serialization() {
