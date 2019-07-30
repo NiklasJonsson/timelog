@@ -313,6 +313,32 @@ impl TimeLogger {
         return days;
     }
 
+    pub fn batch_add(&mut self, ty: TimeLogEntryType, from: NaiveDate, to: NaiveDate,
+                     weekday_only: bool) -> TimeLogResult<()> {
+        assert!(from < to);
+        let mut cur = from;
+        while cur < to {
+            if weekday_only && !is_weekday(cur) {
+                cur = cur.succ();
+                continue;
+            }
+
+            match self.date2logday.entry(cur) {
+                Occupied(logday) => {
+                    return Err(
+                    TimeLogError::inv_inp(format!("There is already an entry for {}: {}", cur, logday.key()).as_str()));
+                }
+                Vacant(vacant) => {
+                    vacant.insert(TimeLogDay::full(cur, ty));
+                }
+            };
+
+            cur = cur.succ();
+        }
+
+        Ok(())
+    }
+
     gen_verify_entries!(verify_entries_in_month_of, get_first_day_in_month_of, get_last_day_in_month_of);
     gen_verify_entries!(verify_entries_in_week_of, get_monday_in_week_of, get_sunday_in_week_of);
 }
@@ -567,7 +593,7 @@ mod tests {
 
         assert_eq!(logger.flextime_as_of(mon),  -Duration::minutes(60 + 35));
     }
-  
+
 
     #[test]
     fn timelogger_consistent_serialization() {

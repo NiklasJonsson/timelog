@@ -13,6 +13,9 @@ use chrono::Duration;
 use chrono::ParseResult;
 use timelogger::TimeLogger;
 use timelog::TimeLogError;
+use timelog::TimeLogEntryType;
+
+use std::str::FromStr;
 
 const USAGE: &'static str = "
 Timelog - log time
@@ -26,6 +29,7 @@ Usage:
   timelog day [--with <time>]
   timelog day [--last]
   timelog day [--mon | --tue | --wed | --thu | --fri]
+  timelog batch --from <from> --to <to> --type <type> [--weekday-only]
   timelog view <n-entries>
   timelog (-h | --help)
 
@@ -43,7 +47,7 @@ struct Args {
     cmd_day: bool,
     cmd_view: bool,
     arg_time: Option<String>,
-    arg_n_entries: Option<usize>,
+    arg_n_entries: usize,
     flag_with: Option<String>,
     flag_last: bool,
     flag_mon: bool,
@@ -51,6 +55,12 @@ struct Args {
     flag_wed: bool,
     flag_thu: bool,
     flag_fri: bool,
+    // batch
+    cmd_batch: bool,
+    arg_from: String,
+    arg_to: String,
+    arg_type: String,
+    flag_weekday_only: bool,
 }
 
 fn parse_time_arg(s: &String) -> ParseResult<NaiveTime> {
@@ -291,9 +301,43 @@ fn real_main() -> i32 {
         };
         println!("{} worked {}", fmt_dur(worked_time), day_text_fmt);
     } else if args.cmd_view {
-        debug_assert!(args.arg_n_entries.is_some());
-        for tld in tl.get_latest_n_entries(args.arg_n_entries.unwrap()) {
+        for tld in tl.get_latest_n_entries(args.arg_n_entries) {
             println!("{}", tld);
+        }
+    } else if args.cmd_batch {
+        println!("{:#?}", args);
+        let ty = match TimeLogEntryType::from_str(args.arg_type.as_str()) {
+            Ok(x) => x,
+            Err(e) => {
+                println!("Failed to parse TimeLogEntryType for --type: {}", e);
+                return 1;
+            }
+        };
+
+        let naive_date_str = "%Y/%m/%d";
+
+        let from = match NaiveDate::parse_from_str(args.arg_from.as_str(), naive_date_str) {
+            Ok(x) => x,
+            Err(e) => {
+                println!("Failed to parse NaiveDate for --from: {}", e);
+                return 1;
+            }
+        };
+
+        let to = match NaiveDate::parse_from_str(args.arg_to.as_str(), naive_date_str) {
+            Ok(x) => x,
+            Err(e) => {
+                println!("Failed to parse NaiveDate for --to: {}", e);
+                return 1;
+            }
+        };
+
+        match tl.batch_add(ty, from, to, args.flag_weekday_only) {
+            Err(e) => {
+                println!("Batch command failed: {}", e);
+                return 1;
+            }
+            _ => (),
         }
     }
 
@@ -302,7 +346,7 @@ fn real_main() -> i32 {
             println!("Failed to save to logfile: {}", x);
             return 1;
         },
-        Ok(_) => (),
+        _ => (),
     }
 
     return 0;

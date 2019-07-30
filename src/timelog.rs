@@ -341,6 +341,11 @@ impl TimeLogDay {
         TimeLogDay{date: date, entries: Vec::new()}
     }
 
+    pub fn full(date: NaiveDate, entry_type: TimeLogEntryType) -> Self {
+        let entries = vec![TimeLogEntry{date, entry_type, start: None, end: None}];
+        TimeLogDay{date, entries}
+    }
+
     gen_set!(set_end, end, set_end, TimeLogEntry::end);
     gen_set!(set_start, start, set_start, TimeLogEntry::start);
 
