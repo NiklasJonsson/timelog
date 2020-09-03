@@ -1,22 +1,18 @@
-extern crate chrono;
-
-use std;
 use std::cmp::Ordering;
-use std::fmt;
-use std::io;
 use std::error::Error;
+use std::fmt;
 use std::fmt::Display;
 use std::fmt::Formatter;
-use std::str::FromStr;
+use std::io;
 use std::slice::Iter;
+use std::str::FromStr;
 
-use chrono::NaiveTime;
-use chrono::Duration;
-use chrono::Weekday;
 use chrono::prelude::*;
+use chrono::Duration;
+use chrono::NaiveTime;
+use chrono::Weekday;
 
-
-use TimeLogError::{ParseError, TimeError, InvalidInputError, IOError};
+use crate::TimeLogError::{IOError, InvalidInputError, ParseError, TimeError};
 
 pub type TimeLogResult<T> = std::result::Result<T, TimeLogError>;
 
@@ -58,6 +54,7 @@ impl TimeLogError {
     }
 }
 
+impl Error for TimeLogError {}
 impl Display for TimeLogError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
@@ -65,17 +62,6 @@ impl Display for TimeLogError {
             TimeLogError::IOError(ref err) => write!(f, "IO error: {}", err),
             TimeLogError::TimeError(ref err) => write!(f, "Time error: {}", err),
             TimeLogError::InvalidInputError(ref s) => write!(f, "Invalid input: {}", s),
-        }
-    }
-}
-
-impl Error for TimeLogError {
-    fn description(&self) -> &str {
-        match *self {
-            TimeLogError::ParseError(ref s) => s.as_str(),
-            TimeLogError::IOError(ref err) => err.description(),
-            TimeLogError::TimeError(ref err) => err.description(),
-            TimeLogError::InvalidInputError(ref s) => s.as_str(),
         }
     }
 }
@@ -108,13 +94,16 @@ pub enum TimeLogEntryType {
 }
 
 impl TimeLogEntryType {
-    pub fn iterator() -> Iter<'static, TimeLogEntryType> {
-        static ETYPES: [TimeLogEntryType; 5] = [TimeLogEntryType::Work,
+    const ETYPES: [TimeLogEntryType; 5] = [
+        TimeLogEntryType::Work,
         TimeLogEntryType::Sickness,
         TimeLogEntryType::Vacation,
         TimeLogEntryType::ParentalLeave,
-        TimeLogEntryType::Holiday];
-        ETYPES.into_iter()
+        TimeLogEntryType::Holiday,
+    ];
+
+    pub fn iterator() -> Iter<'static, TimeLogEntryType> {
+        Self::ETYPES.iter()
     }
 }
 
@@ -134,7 +123,10 @@ impl FromStr for TimeLogEntryType {
             "Vacation" => Ok(TimeLogEntryType::Vacation),
             "Sickness" => Ok(TimeLogEntryType::Sickness),
             "Holiday" => Ok(TimeLogEntryType::Holiday),
-            _ => return Err(TimeLogError::parse_error(format!("Can't parse: {} as TimeLogEntryType", s))),
+            _ => Err(TimeLogError::parse_error(format!(
+                "Can't parse: {} as TimeLogEntryType",
+                s
+            ))),
         }
     }
 }
@@ -149,30 +141,48 @@ pub struct TimeLogEntry {
 
 impl Ord for TimeLogEntry {
     fn cmp(&self, other: &TimeLogEntry) -> Ordering {
-        match (self.start, self.end, self.entry_type, self.date,
-               other.start, other.end, other.entry_type, other.date) {
-            (_,Some(end),_,_,Some(start),_,_,_) => end.cmp(&start),
-            (Some(start),_,_,_,_,Some(end),_,_) => start.cmp(&end),
-            (Some(start0),_,_,_,Some(start1),_,_,_) => start0.cmp(&start1),
-            (_,Some(end0),_,_,_,Some(end1),_,_) => end0.cmp(&end1),
-            (_,_,et0,_,_,_,et1,_) => et0.cmp(&et1),
+        match (
+            self.start,
+            self.end,
+            self.entry_type,
+            self.date,
+            other.start,
+            other.end,
+            other.entry_type,
+            other.date,
+        ) {
+            (_, Some(end), _, _, Some(start), _, _, _) => end.cmp(&start),
+            (Some(start), _, _, _, _, Some(end), _, _) => start.cmp(&end),
+            (Some(start0), _, _, _, Some(start1), _, _, _) => start0.cmp(&start1),
+            (_, Some(end0), _, _, _, Some(end1), _, _) => end0.cmp(&end1),
+            (_, _, et0, _, _, _, et1, _) => et0.cmp(&et1),
         }
     }
 }
 
 impl PartialOrd for TimeLogEntry {
-    fn partial_cmp(&self, other: &TimeLogEntry)  -> Option<Ordering> {
+    fn partial_cmp(&self, other: &TimeLogEntry) -> Option<Ordering> {
         Some(self.cmp(other))
     }
 }
 
 impl TimeLogEntry {
     fn start(date: NaiveDate, entry_type: TimeLogEntryType, time: NaiveTime) -> Self {
-        TimeLogEntry{date: date, entry_type: entry_type, start: Some(time), end: None}
+        TimeLogEntry {
+            date,
+            entry_type,
+            start: Some(time),
+            end: None,
+        }
     }
 
     fn end(date: NaiveDate, entry_type: TimeLogEntryType, time: NaiveTime) -> Self {
-        TimeLogEntry{date: date, entry_type: entry_type, start: None, end: Some(time)}
+        TimeLogEntry {
+            date,
+            entry_type,
+            start: None,
+            end: Some(time),
+        }
     }
 
     fn set_start(&mut self, time: NaiveTime) {
@@ -186,21 +196,19 @@ impl TimeLogEntry {
     }
 
     pub fn get_date(&self) -> NaiveDate {
-        return self.date;
+        self.date
     }
 }
 
 fn try_get_naivetime(s: &str) -> Option<NaiveTime> {
     if s.contains("UNDEF") {
-        return None;
+        None
     } else {
-        return NaiveTime::from_str(s).ok();
+        NaiveTime::from_str(s).ok()
     }
 }
 
-macro_rules! TIMELOGENTRY_NAIVEDATE_FORMAT_STRING {
-    () => ("%Y/%m/%d %a");
-}
+const TIMELOGENTRY_NAIVEDATE_FORMAT_STRING: &str = "%Y/%m/%d %a";
 
 impl FromStr for TimeLogEntry {
     type Err = TimeLogError;
@@ -208,38 +216,44 @@ impl FromStr for TimeLogEntry {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let mut delim_split = s.split('|');
 
-        let date: NaiveDate = NaiveDate::parse_from_str(delim_split
-                                                        .next()
-                                                        .ok_or_else(|| TimeLogError::parse_error(
-                                                                format!("Can't read date from: {}", s)))?
-                                                        .trim(),
-                                                        TIMELOGENTRY_NAIVEDATE_FORMAT_STRING!())?;
+        let date: NaiveDate = NaiveDate::parse_from_str(
+            delim_split
+                .next()
+                .ok_or_else(|| TimeLogError::parse_error(format!("Can't read date from: {}", s)))?
+                .trim(),
+            TIMELOGENTRY_NAIVEDATE_FORMAT_STRING,
+        )?;
 
         let mut space_split = delim_split
             .next()
-            .ok_or_else(|| TimeLogError::parse_error(
-                    format!("Invalid format for entry: {}", s)))?
+            .ok_or_else(|| TimeLogError::parse_error(format!("Invalid format for entry: {}", s)))?
             .trim()
             .split(' ');
 
         let entry_type: TimeLogEntryType = space_split
             .next()
-            .ok_or_else(|| TimeLogError::parse_error(
-                    format!("Can't read type from: {}", s)))?
+            .ok_or_else(|| TimeLogError::parse_error(format!("Can't read type from: {}", s)))?
             .trim()
             .parse()?;
 
-        let start = try_get_naivetime(space_split
-                                      .next()
-                                      .ok_or_else(|| TimeLogError::parse_error(
-                                              format!("Can't read start from: {}", s)))?
-                                      .trim());
-        let end = try_get_naivetime(space_split
-                                    .next()
-                                    .ok_or_else(|| TimeLogError::parse_error(
-                                            format!("Can't read end from: {}", s)))?
-                                    .trim());
-        return Ok(TimeLogEntry{date: date, entry_type: entry_type, start: start, end:end});
+        let start = try_get_naivetime(
+            space_split
+                .next()
+                .ok_or_else(|| TimeLogError::parse_error(format!("Can't read start from: {}", s)))?
+                .trim(),
+        );
+        let end = try_get_naivetime(
+            space_split
+                .next()
+                .ok_or_else(|| TimeLogError::parse_error(format!("Can't read end from: {}", s)))?
+                .trim(),
+        );
+        Ok(TimeLogEntry {
+            date,
+            entry_type,
+            start,
+            end,
+        })
     }
 }
 
@@ -252,11 +266,14 @@ fn opt_naivetime_to_str(ont: Option<NaiveTime>) -> String {
 
 impl Display for TimeLogEntry {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        write!(f, "{} | {} {} {}",
-               self.date.format(TIMELOGENTRY_NAIVEDATE_FORMAT_STRING!()),
-               self.entry_type,
-               opt_naivetime_to_str(self.start), 
-               opt_naivetime_to_str(self.end))
+        write!(
+            f,
+            "{} | {} {} {}",
+            self.date.format(TIMELOGENTRY_NAIVEDATE_FORMAT_STRING),
+            self.entry_type,
+            opt_naivetime_to_str(self.start),
+            opt_naivetime_to_str(self.end)
+        )
     }
 }
 
@@ -270,7 +287,10 @@ impl From<TimeLogEntry> for TimeLogDay {
     fn from(entry: TimeLogEntry) -> TimeLogDay {
         let mut v = Vec::new();
         v.push(entry);
-        TimeLogDay{date: entry.date, entries: v}
+        TimeLogDay {
+            date: entry.date,
+            entries: v,
+        }
     }
 }
 
@@ -297,16 +317,15 @@ macro_rules! gen_set {
             }
             self.entries.sort();
         }
-    }
+    };
 }
 
 pub fn is_weekday(date: NaiveDate) -> bool {
     date.weekday() != Weekday::Sat && date.weekday() != Weekday::Sun
 }
 
-
 fn is_workday(date: NaiveDate) -> bool {
-    return is_weekday(date);
+    is_weekday(date)
 }
 
 impl TimeLogDay {
@@ -329,7 +348,7 @@ impl TimeLogDay {
                 }
             }
         }
-        return true;
+        true
     }
 
     pub fn add_entry(&mut self, e: TimeLogEntry) {
@@ -338,24 +357,36 @@ impl TimeLogDay {
     }
 
     pub fn empty(date: NaiveDate) -> TimeLogDay {
-        TimeLogDay{date: date, entries: Vec::new()}
+        TimeLogDay {
+            date,
+            entries: Vec::new(),
+        }
     }
 
     pub fn full(date: NaiveDate, entry_type: TimeLogEntryType) -> Self {
-        let entries = vec![TimeLogEntry{date, entry_type, start: None, end: None}];
-        TimeLogDay{date, entries}
+        let entries = vec![TimeLogEntry {
+            date,
+            entry_type,
+            start: None,
+            end: None,
+        }];
+        TimeLogDay { date, entries }
     }
 
     gen_set!(set_end, end, set_end, TimeLogEntry::end);
     gen_set!(set_start, start, set_start, TimeLogEntry::start);
 
-    pub fn time_logged_with(&self, with: Option<NaiveTime>, etype: TimeLogEntryType) -> TimeLogResult<Duration> {
+    pub fn time_logged_with(
+        &self,
+        with: Option<NaiveTime>,
+        etype: TimeLogEntryType,
+    ) -> TimeLogResult<Duration> {
         let mut dur = self.logged_time(etype);
         if with.is_none() {
             return Ok(dur);
         }
 
-        if self.entries.len() == 0 {
+        if self.entries.is_empty() {
             return Err(TimeLogError::inv_inp("No entries today"));
         } else if self.entries.iter().all(|e| e.start.is_none()) {
             return Err(TimeLogError::inv_inp("No start entries today"));
@@ -371,11 +402,14 @@ impl TimeLogDay {
                     dur = dur + end.signed_duration_since(e.start.unwrap());
                     found = true;
                 } else {
-                    println!("WARNING: More than one entry with undefined end at: {}", self.date);
+                    println!(
+                        "WARNING: More than one entry with undefined end at: {}",
+                        self.date
+                    );
                 }
             }
         }
-        return Ok(dur);
+        Ok(dur)
     }
 
     pub fn loggable_time(&self, _etype: TimeLogEntryType) -> Duration {
@@ -402,13 +436,14 @@ impl TimeLogDay {
             }
         }
 
-        return sum;
+        sum
     }
 
     pub fn has_unfinished_entries(&self) -> bool {
-        self.entries.iter().any(|&e|
-                          e.entry_type == TimeLogEntryType::Work && (e.start.is_none() || e.end.is_none())
-                          || (e.start.is_some() && e.end.is_none() || e.start.is_none() && e.end.is_some()))
+        self.entries.iter().any(|&e| {
+            e.entry_type == TimeLogEntryType::Work && (e.start.is_none() || e.end.is_none())
+                || (e.start.is_some() && e.end.is_none() || e.start.is_none() && e.end.is_some())
+        })
     }
 }
 
@@ -421,7 +456,6 @@ impl Display for TimeLogDay {
             } else {
                 s.push_str(format!("{}", entry).as_str());
             }
-
         }
         write!(f, "{}", s.as_str())
     }
@@ -431,23 +465,25 @@ impl FromStr for TimeLogDay {
     type Err = TimeLogError;
 
     fn from_str(s: &str) -> TimeLogResult<TimeLogDay> {
-        let mut lines = s.lines();
         let mut v: Vec<TimeLogEntry> = Vec::new();
-        while let Some(l) = lines.next() {
+        for l in s.lines() {
             v.push(l.trim().parse()?);
         }
-        debug_assert!(v.len() != 0);
+        debug_assert!(!v.is_empty());
         debug_assert!(v.iter().all(|x| x.date == v[0].date));
 
-        Ok(TimeLogDay{date: v[0].date, entries: v})
+        Ok(TimeLogDay {
+            date: v[0].date,
+            entries: v,
+        })
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use chrono::NaiveTime;
     use chrono::Duration;
+    use chrono::NaiveTime;
     #[test]
     fn timelogentry_basic_mutators() {
         let tdy = Local::today().naive_local();
@@ -493,7 +529,9 @@ mod tests {
         let all_undef_vac: TimeLogEntry = "2017/12/22 Fri | Vacation UNDEF UNDEF".parse().unwrap();
         assert_eq!(all_undef_vac.entry_type, TimeLogEntryType::Vacation);
         assert_eq!(all_undef_vac.date, NaiveDate::from_ymd(2017, 12, 22));
-        let all_undef_pl: TimeLogEntry = "2017/12/22 Fri | ParentalLeave UNDEF UNDEF".parse().unwrap();
+        let all_undef_pl: TimeLogEntry = "2017/12/22 Fri | ParentalLeave UNDEF UNDEF"
+            .parse()
+            .unwrap();
         assert_eq!(all_undef_pl.entry_type, TimeLogEntryType::ParentalLeave);
         assert_eq!(all_undef_pl.date, NaiveDate::from_ymd(2017, 12, 22));
         let all_undef_s: TimeLogEntry = "2017/12/22 Fri | Sickness UNDEF UNDEF".parse().unwrap();
@@ -504,20 +542,35 @@ mod tests {
     #[test]
     fn timelogentry_consistent_serialiation() {
         let all_undef = "2017/12/22 Fri | Work UNDEF UNDEF";
-        assert_eq!(all_undef, all_undef.parse::<TimeLogEntry>().unwrap().to_string());
+        assert_eq!(
+            all_undef,
+            all_undef.parse::<TimeLogEntry>().unwrap().to_string()
+        );
 
         let start = "2017/12/22 Fri | Work 07:31:00 UNDEF";
         assert_eq!(start, start.parse::<TimeLogEntry>().unwrap().to_string());
 
         let start_end = "2017/12/22 Fri | Work 07:31:00 12:00:00";
-        assert_eq!(start_end, start_end.parse::<TimeLogEntry>().unwrap().to_string());
+        assert_eq!(
+            start_end,
+            start_end.parse::<TimeLogEntry>().unwrap().to_string()
+        );
 
         let all_undef_vac = "2017/12/22 Fri | Vacation UNDEF UNDEF";
-        assert_eq!(all_undef_vac, all_undef_vac.parse::<TimeLogEntry>().unwrap().to_string());
+        assert_eq!(
+            all_undef_vac,
+            all_undef_vac.parse::<TimeLogEntry>().unwrap().to_string()
+        );
         let all_undef_pl = "2017/12/22 Fri | ParentalLeave UNDEF UNDEF";
-        assert_eq!(all_undef_pl, all_undef_pl.parse::<TimeLogEntry>().unwrap().to_string());
+        assert_eq!(
+            all_undef_pl,
+            all_undef_pl.parse::<TimeLogEntry>().unwrap().to_string()
+        );
         let all_undef_s = "2017/12/22 Fri | Sickness UNDEF UNDEF";
-        assert_eq!(all_undef_s, all_undef_s.parse::<TimeLogEntry>().unwrap().to_string());
+        assert_eq!(
+            all_undef_s,
+            all_undef_s.parse::<TimeLogEntry>().unwrap().to_string()
+        );
     }
 
     #[test]
@@ -529,7 +582,6 @@ mod tests {
         assert_eq!(mon.entries[0].start, Some(start));
         assert_eq!(mon.entries[0].end, None);
         assert_eq!(mon.entries.len(), 1);
-
     }
 
     #[test]
@@ -539,8 +591,10 @@ mod tests {
         let all_undef_vac = "2017/12/18 Mon | Vacation UNDEF UNDEF";
         let all_undef_pl = "2017/12/18 Mon | ParentalLeave UNDEF UNDEF";
         let all_undef_s = "2017/12/18 Mon | Sickness UNDEF UNDEF";
-        let s = format!("{}\n{}\n{}\n{}\n{}", all_undef, start,
-                        all_undef_vac, all_undef_pl, all_undef_s);
+        let s = format!(
+            "{}\n{}\n{}\n{}\n{}",
+            all_undef, start, all_undef_vac, all_undef_pl, all_undef_s
+        );
 
         let day: TimeLogDay = s.parse().unwrap();
         assert_eq!(day.entries.len(), 5);
@@ -579,8 +633,10 @@ mod tests {
         let all_undef_vac = "2017/12/18 Mon | Vacation UNDEF UNDEF";
         let all_undef_pl = "2017/12/18 Mon | ParentalLeave UNDEF UNDEF";
         let all_undef_s = "2017/12/18 Mon | Sickness UNDEF UNDEF";
-        let s = format!("{}\n{}\n{}\n{}\n{}", all_undef, start,
-                        all_undef_vac, all_undef_pl, all_undef_s);
+        let s = format!(
+            "{}\n{}\n{}\n{}\n{}",
+            all_undef, start, all_undef_vac, all_undef_pl, all_undef_s
+        );
 
         let day: TimeLogDay = s.parse().unwrap();
         assert_eq!(day.entries.len(), 5);
@@ -619,7 +675,8 @@ mod tests {
         let entries = vec![
             "2017/12/18 Mon | Work UNDEF 07:00:00\n",
             "2017/12/18 Mon | Work 07:31:00 UNDEF\n",
-            "2017/12/18 Mon | Work UNDEF UNDEF\n"];
+            "2017/12/18 Mon | Work UNDEF UNDEF\n",
+        ];
         let mut s = String::new();
         for e in entries {
             s.push_str(e);
@@ -627,26 +684,26 @@ mod tests {
 
         let mut day: TimeLogDay = s.as_str().parse().unwrap();
 
-        day.set_start(NaiveTime::from_hms(06,30,00), TimeLogEntryType::Work);
+        day.set_start(NaiveTime::from_hms(06, 30, 00), TimeLogEntryType::Work);
         assert_eq!(day.entries[0].start, Some(NaiveTime::from_hms(6, 30, 0)));
         assert_eq!(day.entries[0].end, Some(NaiveTime::from_hms(7, 0, 0)));
         assert_eq!(day.entries[0].entry_type, TimeLogEntryType::Work);
         assert_eq!(day.entries[0].date, NaiveDate::from_ymd(2017, 12, 18));
 
-        day.set_start(NaiveTime::from_hms(12,30,00), TimeLogEntryType::Work);
+        day.set_start(NaiveTime::from_hms(12, 30, 00), TimeLogEntryType::Work);
         assert_eq!(day.entries[2].start, Some(NaiveTime::from_hms(12, 30, 0)));
         assert_eq!(day.entries[2].end, None);
         assert_eq!(day.entries[2].entry_type, TimeLogEntryType::Work);
         assert_eq!(day.entries[2].date, NaiveDate::from_ymd(2017, 12, 18));
 
-        day.set_end(NaiveTime::from_hms(12,25,00), TimeLogEntryType::Work);
-        assert_eq!(day.entries[1].start, Some(NaiveTime::from_hms(7,31,0)));
+        day.set_end(NaiveTime::from_hms(12, 25, 00), TimeLogEntryType::Work);
+        assert_eq!(day.entries[1].start, Some(NaiveTime::from_hms(7, 31, 0)));
         assert_eq!(day.entries[1].end, Some(NaiveTime::from_hms(12, 25, 0)));
         assert_eq!(day.entries[1].entry_type, TimeLogEntryType::Work);
         assert_eq!(day.entries[1].date, NaiveDate::from_ymd(2017, 12, 18));
 
-        day.set_end(NaiveTime::from_hms(19,12,00), TimeLogEntryType::Work);
-        assert_eq!(day.entries[2].start, Some(NaiveTime::from_hms(12,30,0)));
+        day.set_end(NaiveTime::from_hms(19, 12, 00), TimeLogEntryType::Work);
+        assert_eq!(day.entries[2].start, Some(NaiveTime::from_hms(12, 30, 0)));
         assert_eq!(day.entries[2].end, Some(NaiveTime::from_hms(19, 12, 0)));
         assert_eq!(day.entries[2].entry_type, TimeLogEntryType::Work);
         assert_eq!(day.entries[2].date, NaiveDate::from_ymd(2017, 12, 18));
@@ -656,7 +713,8 @@ mod tests {
     fn timelogday_diff_entry_types() {
         let entries = vec![
             "2017/12/18 Mon | Work UNDEF 07:00:00\n",
-            "2017/12/18 Mon | Sickness 07:31:00 UNDEF"];
+            "2017/12/18 Mon | Sickness 07:31:00 UNDEF",
+        ];
         let mut s = String::new();
         for e in entries {
             s.push_str(e);
@@ -664,20 +722,20 @@ mod tests {
 
         let mut day: TimeLogDay = s.as_str().parse().unwrap();
 
-        day.set_start(NaiveTime::from_hms(06,30,00), TimeLogEntryType::Work);
+        day.set_start(NaiveTime::from_hms(06, 30, 00), TimeLogEntryType::Work);
         assert_eq!(day.entries[0].start, Some(NaiveTime::from_hms(6, 30, 0)));
         assert_eq!(day.entries[0].end, Some(NaiveTime::from_hms(7, 0, 0)));
         assert_eq!(day.entries[0].entry_type, TimeLogEntryType::Work);
         assert_eq!(day.entries[0].date, NaiveDate::from_ymd(2017, 12, 18));
 
-        day.set_start(NaiveTime::from_hms(12,30,00), TimeLogEntryType::Sickness);
+        day.set_start(NaiveTime::from_hms(12, 30, 00), TimeLogEntryType::Sickness);
         assert_eq!(day.entries[2].start, Some(NaiveTime::from_hms(12, 30, 0)));
         assert_eq!(day.entries[2].end, None);
         assert_eq!(day.entries[2].entry_type, TimeLogEntryType::Sickness);
         assert_eq!(day.entries[2].date, NaiveDate::from_ymd(2017, 12, 18));
 
-        day.set_end(NaiveTime::from_hms(12,25,00), TimeLogEntryType::Sickness);
-        assert_eq!(day.entries[1].start, Some(NaiveTime::from_hms(7,31,0)));
+        day.set_end(NaiveTime::from_hms(12, 25, 00), TimeLogEntryType::Sickness);
+        assert_eq!(day.entries[1].start, Some(NaiveTime::from_hms(7, 31, 0)));
         assert_eq!(day.entries[1].end, Some(NaiveTime::from_hms(12, 25, 0)));
         assert_eq!(day.entries[1].entry_type, TimeLogEntryType::Sickness);
         assert_eq!(day.entries[1].date, NaiveDate::from_ymd(2017, 12, 18));
@@ -705,6 +763,9 @@ mod tests {
 
         let day: TimeLogDay = s.as_str().parse().unwrap();
         let etype = TimeLogEntryType::Work;
-        assert_eq!(day.time_logged_with(Some(NaiveTime::from_hms(8,0,0)), etype), Ok(Duration::minutes(89)));
+        assert_eq!(
+            day.time_logged_with(Some(NaiveTime::from_hms(8, 0, 0)), etype),
+            Ok(Duration::minutes(89))
+        );
     }
 }

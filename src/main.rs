@@ -1,23 +1,20 @@
-#[macro_use]
-extern crate serde_derive;
-extern crate docopt;
-extern crate chrono;
-
 mod timelog;
 mod timelogger;
 
-use docopt::Docopt;
+use serde::Deserialize;
+
+use crate::timelog::TimeLogEntryType;
+use crate::timelog::TimeLogError;
+use crate::timelogger::TimeLogger;
 use chrono::prelude::*;
-use chrono::NaiveTime;
 use chrono::Duration;
+use chrono::NaiveTime;
 use chrono::ParseResult;
-use timelogger::TimeLogger;
-use timelog::TimeLogError;
-use timelog::TimeLogEntryType;
+use docopt::Docopt;
 
 use std::str::FromStr;
 
-const USAGE: &'static str = "
+const USAGE: &str = "
 Timelog - log time
 
 Usage:
@@ -63,13 +60,13 @@ struct Args {
     flag_weekday_only: bool,
 }
 
-fn parse_time_arg(s: &String) -> ParseResult<NaiveTime> {
+fn parse_time_arg(s: &str) -> ParseResult<NaiveTime> {
     // %R = %H:%M
     // %H: hour, two digits
     // %M: minute, two digits
     NaiveTime::parse_from_str(s, "%R")
-        .or(NaiveTime::parse_from_str(s, "%H.%M"))
-        .or(NaiveTime::parse_from_str(s, "%H"))
+        .or_else(|_| NaiveTime::parse_from_str(s, "%H.%M"))
+        .or_else(|_| NaiveTime::parse_from_str(s, "%H"))
 }
 
 fn get_time(s: Option<String>) -> ParseResult<NaiveTime> {
@@ -104,7 +101,7 @@ fn get_date_for_day_cmd(args: &Args) -> NaiveDate {
         date = date.pred();
     }
 
-    return date;
+    date
 }
 
 fn get_text_for_day_cmd(args: &Args) -> String {
@@ -124,14 +121,15 @@ fn get_text_for_day_cmd(args: &Args) -> String {
     } else {
         ret = "today";
     }
-    return ret.to_string();
+    ret.to_string()
 }
 
 fn get_text_for_monthweek_cmd(args: &Args) -> String {
     match args.flag_last {
         true => "last",
-        false => "this"
-    }.to_string()
+        false => "this",
+    }
+    .to_string()
 }
 
 fn get_date_for_week_cmd(args: &Args) -> NaiveDate {
@@ -145,14 +143,14 @@ fn get_date_for_week_cmd(args: &Args) -> NaiveDate {
         date = date.pred();
     }
 
-    return date;
+    date
 }
 
 fn get_date_for_month_cmd(args: &Args) -> NaiveDate {
     let today = Local::today().naive_local();
     match args.flag_last {
         false => today,
-        true => NaiveDate::from_ymd(today.year(), today.month(), 1).pred()
+        true => NaiveDate::from_ymd(today.year(), today.month(), 1).pred(),
     }
 }
 
@@ -175,7 +173,7 @@ fn real_main() -> i32 {
             Err(e) => {
                 println!("Unable to update timelog: {}", e);
                 return 1;
-            },
+            }
         };
         tl.log_start(Local::today().naive_local(), time);
     } else if args.cmd_end {
@@ -184,17 +182,17 @@ fn real_main() -> i32 {
             Err(e) => {
                 println!("Unable to update timelog: {}", e);
                 return 1;
-            },
+            }
         };
         tl.log_end(Local::today().naive_local(), time);
     } else if args.cmd_month {
         let date = get_date_for_month_cmd(&args);
-        let time  = match get_time(args.flag_with) {
+        let time = match get_time(args.flag_with) {
             Ok(t) => t,
             Err(e) => {
                 println!("Unable to parse args: {}", e);
                 return 1;
-            },
+            }
         };
 
         let this_month = !args.flag_last;
@@ -216,28 +214,30 @@ fn real_main() -> i32 {
             Err(e) => {
                 println!("Couldn't calculate time left this week: {}", e);
                 return 1;
-            },
+            }
         };
         let time_worked = match tl.time_logged_in_month_of_with(date, time_opt) {
             Ok(x) => x,
             Err(e) => {
                 println!("Couldn't calculate time worked this week: {}", e);
                 return 1;
-            },
+            }
         };
 
-        println!("{} worked this month\n{} left this month",
-                 fmt_dur(time_worked),
-                 fmt_dur(time_left));
+        println!(
+            "{} worked this month\n{} left this month",
+            fmt_dur(time_worked),
+            fmt_dur(time_left)
+        );
     } else if args.cmd_week {
         let date = get_date_for_week_cmd(&args);
         let week_text_fmt = get_text_for_monthweek_cmd(&args);
-        let time  = match get_time(args.flag_with) {
+        let time = match get_time(args.flag_with) {
             Ok(t) => t,
             Err(e) => {
                 println!("Unable to parse args: {}", e);
                 return 1;
-            },
+            }
         };
 
         let this_week = !args.flag_last;
@@ -259,32 +259,42 @@ fn real_main() -> i32 {
             Err(e) => {
                 println!("Couldn't calculate time left {} week: {}", week_text_fmt, e);
                 return 1;
-            },
+            }
         };
         let time_worked = match tl.time_logged_in_week_of_with(date, time_opt) {
             Ok(x) => x,
             Err(e) => {
-                println!("Couldn't calculate time worked {} week: {}", week_text_fmt, e);
+                println!(
+                    "Couldn't calculate time worked {} week: {}",
+                    week_text_fmt, e
+                );
                 return 1;
-            },
+            }
         };
 
-        println!("{0} worked {3} week\n{1} left {3} week ({2} of which is flex)",
-        fmt_dur(time_worked),
-        fmt_dur(time_left),
-        fmt_dur(flex),
-        week_text_fmt);
+        println!(
+            "{0} worked {3} week\n{1} left {3} week ({2} of which is flex)",
+            fmt_dur(time_worked),
+            fmt_dur(time_left),
+            fmt_dur(flex),
+            week_text_fmt
+        );
     } else if args.cmd_day {
         let date = get_date_for_day_cmd(&args);
         let day_text_fmt = get_text_for_day_cmd(&args);
-        let today = !(args.flag_last || args.flag_mon || args.flag_tue || args.flag_wed || args.flag_thu || args.flag_fri);
+        let today = !(args.flag_last
+            || args.flag_mon
+            || args.flag_tue
+            || args.flag_wed
+            || args.flag_thu
+            || args.flag_fri);
 
-        let time  = match get_time(args.flag_with) {
+        let time = match get_time(args.flag_with) {
             Ok(t) => t,
             Err(e) => {
                 println!("Unable to parse args: {}", e);
                 return 1;
-            },
+            }
         };
 
         let time_opt = match today {
@@ -332,24 +342,18 @@ fn real_main() -> i32 {
             }
         };
 
-        match tl.batch_add(ty, from, to, args.flag_weekday_only) {
-            Err(e) => {
-                println!("Batch command failed: {}", e);
-                return 1;
-            }
-            _ => (),
+        if let Err(e) = tl.batch_add(ty, from, to, args.flag_weekday_only) {
+            println!("Batch command failed: {}", e);
+            return 1;
         }
     }
 
-    match tl.save() {
-        Err(x) => {
-            println!("Failed to save to logfile: {}", x);
-            return 1;
-        },
-        _ => (),
+    if let Err(e) = tl.save() {
+        println!("Failed to save to logfile: {}", e);
+        return 1;
     }
 
-    return 0;
+    0
 }
 
 fn main() {
@@ -359,15 +363,33 @@ fn main() {
 
 #[cfg(test)]
 mod main_tests {
-    use chrono::NaiveTime;
     use super::*;
+    use chrono::NaiveTime;
     #[test]
     fn parse_time() {
-        assert_eq!(parse_time_arg(&String::from("03:00")), Ok(NaiveTime::from_hms(3,0,0)));
-        assert_eq!(parse_time_arg(&String::from("03.00")), Ok(NaiveTime::from_hms(3,0,0)));
-        assert_eq!(parse_time_arg(&String::from("3.00")), Ok(NaiveTime::from_hms(3,0,0)));
-        assert_eq!(parse_time_arg(&String::from("3.0")), Ok(NaiveTime::from_hms(3,0,0)));
-        assert_eq!(parse_time_arg(&String::from("03.0")), Ok(NaiveTime::from_hms(3,0,0)));
-        assert_eq!(parse_time_arg(&String::from("3.00")), Ok(NaiveTime::from_hms(3,0,0)));
+        assert_eq!(
+            parse_time_arg(&String::from("03:00")),
+            Ok(NaiveTime::from_hms(3, 0, 0))
+        );
+        assert_eq!(
+            parse_time_arg(&String::from("03.00")),
+            Ok(NaiveTime::from_hms(3, 0, 0))
+        );
+        assert_eq!(
+            parse_time_arg(&String::from("3.00")),
+            Ok(NaiveTime::from_hms(3, 0, 0))
+        );
+        assert_eq!(
+            parse_time_arg(&String::from("3.0")),
+            Ok(NaiveTime::from_hms(3, 0, 0))
+        );
+        assert_eq!(
+            parse_time_arg(&String::from("03.0")),
+            Ok(NaiveTime::from_hms(3, 0, 0))
+        );
+        assert_eq!(
+            parse_time_arg(&String::from("3.00")),
+            Ok(NaiveTime::from_hms(3, 0, 0))
+        );
     }
 }
