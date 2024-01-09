@@ -160,7 +160,6 @@ macro_rules! gen_verify_entries {
     };
 }
 
-const TIMELOGGER_FILE: &str = ".timelog";
 impl TimeLogger {
     fn write_entries(&self) -> String {
         let mut s = String::new();
@@ -189,9 +188,12 @@ impl TimeLogger {
         Ok(())
     }
 
-    fn from_file(path_buf: PathBuf) -> TimeLogResult<Self> {
+    pub fn at_path<P>(path: P) -> TimeLogResult<Self>
+    where
+        P: Into<PathBuf>,
+    {
         let mut tl = TimeLogger {
-            file_path: path_buf,
+            file_path: path.into(),
             date2logday: HashMap::new(),
         };
         if !tl.file_path.as_path().exists() {
@@ -215,13 +217,6 @@ impl TimeLogger {
         Ok(tl)
     }
 
-    pub fn default() -> TimeLogResult<Self> {
-        let dirs = directories::ProjectDirs::from("", "", "timelog")
-            .ok_or_else(|| TimeLogError::other_io("Can't find home dir"))?;
-        let path_buf = dirs.data_dir().join(TIMELOGGER_FILE);
-        TimeLogger::from_file(path_buf)
-    }
-
     gen_time_between!(compute_logged_time_between, logged_time, 0, true);
     gen_time_between!(compute_loggable_time_between, loggable_time, 8, false);
 
@@ -238,8 +233,13 @@ impl TimeLogger {
         get_sunday_in_week_of
     );
 
-    fn log_with(&mut self, date: NaiveDate, time: NaiveTime, mutator: fn(&mut TimeLogDay, NaiveTime, TimeLogEntryType) -> TimeLogEntry) -> TimeLogEntry { 
-     let entry_type = TimeLogEntryType::Work;
+    fn log_with(
+        &mut self,
+        date: NaiveDate,
+        time: NaiveTime,
+        mutator: fn(&mut TimeLogDay, NaiveTime, TimeLogEntryType) -> TimeLogEntry,
+    ) -> TimeLogEntry {
+        let entry_type = TimeLogEntryType::Work;
         let time = NaiveTime::from_hms(time.hour(), time.minute(), time.second());
 
         let tld = match self.date2logday.entry(date) {
@@ -745,7 +745,7 @@ mod tests {
             file_path: PathBuf::new(),
             date2logday: HashMap::new(),
         };
-        let today = NaiveDate::from_ymd(2018, 01, 01);
+        let today = NaiveDate::from_ymd(2018, 1, 1);
         let start = NaiveTime::from_hms(12, 0, 0);
         let end = NaiveTime::from_hms(13, 0, 0);
         logger.log_start(today, start);
@@ -793,8 +793,8 @@ mod tests {
 
         let mon1 = NaiveDate::from_ymd(2017, 12, 18);
         let mon2 = NaiveDate::from_ymd(2017, 12, 25);
-        let mon3 = NaiveDate::from_ymd(2018, 01, 01);
-        let tue3 = NaiveDate::from_ymd(2018, 01, 02);
+        let mon3 = NaiveDate::from_ymd(2018, 1, 1);
+        let tue3 = NaiveDate::from_ymd(2018, 1, 2);
 
         assert_eq!(logger.flextime_as_of(mon1), Duration::minutes(2 * 60 + 25));
         assert_eq!(logger.flextime_as_of(mon2), -Duration::minutes(60));
