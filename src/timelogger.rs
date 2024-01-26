@@ -335,7 +335,7 @@ impl TimeLogger {
         let mut file = File::create(fp)?;
         let s = self.write_entries();
         fs::copy(fp, bkp_fp)?;
-        match file.write_all(s.as_str().as_bytes()) {
+        match file.write_all(s.as_bytes()) {
             Ok(_) => {
                 fs::remove_file(bkp_fp)?;
                 Ok(())

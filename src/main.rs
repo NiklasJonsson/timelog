@@ -1,21 +1,23 @@
+mod cli;
 mod timelog;
 mod timelogger;
 
 use serde::Deserialize;
 
 use crate::timelog::TimeLogEntryType;
-use crate::timelog::TimeLogError;
 use crate::timelogger::TimeLogger;
 use chrono::prelude::*;
 use chrono::Duration;
-use chrono::NaiveTime;
-use chrono::ParseResult;
 use docopt::Docopt;
 
+use std::process::ExitCode;
 use std::str::FromStr;
 
 const USAGE: &str = "
-Timelog - log time
+Timelog
+
+A commandline utility to log time. It maintains a human-editable time log
+in ~/.timelog.
 
 Usage:
   timelog start [<time>]
@@ -58,22 +60,6 @@ struct Args {
     arg_to: String,
     arg_type: String,
     flag_weekday_only: bool,
-}
-
-fn parse_time_arg(s: &str) -> ParseResult<NaiveTime> {
-    // %R = %H:%M
-    // %H: hour, two digits
-    // %M: minute, two digits
-    NaiveTime::parse_from_str(s, "%R")
-        .or_else(|_| NaiveTime::parse_from_str(s, "%H.%M"))
-        .or_else(|_| NaiveTime::parse_from_str(s, "%H"))
-}
-
-fn get_time(s: Option<String>) -> ParseResult<NaiveTime> {
-    match s {
-        Some(x) => parse_time_arg(&x),
-        None => Ok(Local::now().time()),
-    }
 }
 
 fn fmt_dur(dur: Duration) -> String {
@@ -154,7 +140,7 @@ fn get_date_for_month_cmd(args: &Args) -> NaiveDate {
     }
 }
 
-fn real_main() -> i32 {
+fn main() -> ExitCode {
     let args: Args = Docopt::new(USAGE)
         .and_then(|d| d.deserialize())
         .unwrap_or_else(|e| e.exit());
@@ -163,35 +149,21 @@ fn real_main() -> i32 {
         Ok(x) => x,
         Err(e) => {
             println!("ERROR: Could not create Timelogger instance: {}", e);
-            return 1;
+            return ExitCode::FAILURE;
         }
     };
 
     if args.cmd_start {
-        let time = match get_time(args.arg_time) {
-            Ok(t) => t,
-            Err(e) => {
-                println!("Unable to update timelog: {}", e);
-                return 1;
-            }
-        };
-        tl.log_start(Local::today().naive_local(), time);
+        return cli::start(&mut tl, args.arg_time);
     } else if args.cmd_end {
-        let time = match get_time(args.arg_time) {
-            Ok(t) => t,
-            Err(e) => {
-                println!("Unable to update timelog: {}", e);
-                return 1;
-            }
-        };
-        tl.log_end(Local::today().naive_local(), time);
+        return cli::end(&mut tl, args.arg_time);
     } else if args.cmd_month {
         let date = get_date_for_month_cmd(&args);
-        let time = match get_time(args.flag_with) {
+        let time = match cli::get_time(args.flag_with) {
             Ok(t) => t,
             Err(e) => {
                 println!("Unable to parse args: {}", e);
-                return 1;
+                return ExitCode::FAILURE;
             }
         };
 
@@ -213,14 +185,14 @@ fn real_main() -> i32 {
             Ok(x) => x,
             Err(e) => {
                 println!("Couldn't calculate time left this week: {}", e);
-                return 1;
+                return ExitCode::FAILURE;
             }
         };
         let time_worked = match tl.time_logged_in_month_of_with(date, time_opt) {
             Ok(x) => x,
             Err(e) => {
                 println!("Couldn't calculate time worked this week: {}", e);
-                return 1;
+                return ExitCode::FAILURE;
             }
         };
 
@@ -232,11 +204,11 @@ fn real_main() -> i32 {
     } else if args.cmd_week {
         let date = get_date_for_week_cmd(&args);
         let week_text_fmt = get_text_for_monthweek_cmd(&args);
-        let time = match get_time(args.flag_with) {
+        let time = match cli::get_time(args.flag_with) {
             Ok(t) => t,
             Err(e) => {
                 println!("Unable to parse args: {}", e);
-                return 1;
+                return ExitCode::FAILURE;
             }
         };
 
@@ -258,7 +230,7 @@ fn real_main() -> i32 {
             Ok(x) => x,
             Err(e) => {
                 println!("Couldn't calculate time left {} week: {}", week_text_fmt, e);
-                return 1;
+                return ExitCode::FAILURE;
             }
         };
         let time_worked = match tl.time_logged_in_week_of_with(date, time_opt) {
@@ -268,7 +240,7 @@ fn real_main() -> i32 {
                     "Couldn't calculate time worked {} week: {}",
                     week_text_fmt, e
                 );
-                return 1;
+                return ExitCode::FAILURE;
             }
         };
 
@@ -289,11 +261,11 @@ fn real_main() -> i32 {
             || args.flag_thu
             || args.flag_fri);
 
-        let time = match get_time(args.flag_with) {
+        let time = match cli::get_time(args.flag_with) {
             Ok(t) => t,
             Err(e) => {
                 println!("Unable to parse args: {}", e);
-                return 1;
+                return ExitCode::FAILURE;
             }
         };
 
@@ -306,7 +278,7 @@ fn real_main() -> i32 {
             Ok(x) => x,
             Err(e) => {
                 println!("Couldn't calculate time worked {}: {}", day_text_fmt, e);
-                return 1;
+                return ExitCode::FAILURE;
             }
         };
         println!("{} worked {}", fmt_dur(worked_time), day_text_fmt);
@@ -315,12 +287,11 @@ fn real_main() -> i32 {
             println!("{}", tld);
         }
     } else if args.cmd_batch {
-        println!("{:#?}", args);
         let ty = match TimeLogEntryType::from_str(args.arg_type.as_str()) {
             Ok(x) => x,
             Err(e) => {
                 println!("Failed to parse TimeLogEntryType for --type: {}", e);
-                return 1;
+                return ExitCode::FAILURE;
             }
         };
 
@@ -330,7 +301,7 @@ fn real_main() -> i32 {
             Ok(x) => x,
             Err(e) => {
                 println!("Failed to parse NaiveDate for --from: {}", e);
-                return 1;
+                return ExitCode::FAILURE;
             }
         };
 
@@ -338,58 +309,20 @@ fn real_main() -> i32 {
             Ok(x) => x,
             Err(e) => {
                 println!("Failed to parse NaiveDate for --to: {}", e);
-                return 1;
+                return ExitCode::FAILURE;
             }
         };
 
         if let Err(e) = tl.batch_add(ty, from, to, args.flag_weekday_only) {
             println!("Batch command failed: {}", e);
-            return 1;
+            return ExitCode::FAILURE;
         }
     }
 
     if let Err(e) = tl.save() {
         println!("Failed to save to logfile: {}", e);
-        return 1;
+        return ExitCode::FAILURE;
     }
 
-    0
-}
-
-fn main() {
-    let ret = real_main();
-    std::process::exit(ret);
-}
-
-#[cfg(test)]
-mod main_tests {
-    use super::*;
-    use chrono::NaiveTime;
-    #[test]
-    fn parse_time() {
-        assert_eq!(
-            parse_time_arg(&String::from("03:00")),
-            Ok(NaiveTime::from_hms(3, 0, 0))
-        );
-        assert_eq!(
-            parse_time_arg(&String::from("03.00")),
-            Ok(NaiveTime::from_hms(3, 0, 0))
-        );
-        assert_eq!(
-            parse_time_arg(&String::from("3.00")),
-            Ok(NaiveTime::from_hms(3, 0, 0))
-        );
-        assert_eq!(
-            parse_time_arg(&String::from("3.0")),
-            Ok(NaiveTime::from_hms(3, 0, 0))
-        );
-        assert_eq!(
-            parse_time_arg(&String::from("03.0")),
-            Ok(NaiveTime::from_hms(3, 0, 0))
-        );
-        assert_eq!(
-            parse_time_arg(&String::from("3.00")),
-            Ok(NaiveTime::from_hms(3, 0, 0))
-        );
-    }
+    ExitCode::SUCCESS
 }

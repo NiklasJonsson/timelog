@@ -2,11 +2,12 @@
 name = "timelog"
 version = "0.1.0"
 authors = ["Niklas Jonsson <niklasandersjonsson@gmail.com>"]
-edition = "2018"
+edition = "2021"
 
 [dependencies]
 docopt = "0.8"
 serde = { version = "1.0", features = ["derive"] }
 chrono = "0.4"
-regex = "0.2"
 directories = "3.0"
+log = "0.4"
+env_logger = "0.10"

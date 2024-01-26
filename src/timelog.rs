@@ -12,9 +12,7 @@ use chrono::Duration;
 use chrono::NaiveTime;
 use chrono::Weekday;
 
-use crate::TimeLogError::{IOError, InvalidInputError, ParseError, TimeError};
-
-pub type TimeLogResult<T> = std::result::Result<T, TimeLogError>;
+pub type TimeLogResult<T> = Result<T, TimeLogError>;
 
 #[derive(Debug)]
 pub enum TimeLogError {
@@ -26,13 +24,7 @@ pub enum TimeLogError {
 
 impl PartialEq for TimeLogError {
     fn eq(&self, other: &TimeLogError) -> bool {
-        match (self, other) {
-            (&ParseError(_), &ParseError(_)) => true,
-            (&TimeError(_), &TimeError(_)) => true,
-            (&InvalidInputError(_), &InvalidInputError(_)) => true,
-            (&IOError(_), &IOError(_)) => true,
-            _ => false,
-        }
+        std::mem::discriminant(self) == std::mem::discriminant(other)
     }
 }
 
@@ -285,11 +277,9 @@ pub struct TimeLogDay {
 
 impl From<TimeLogEntry> for TimeLogDay {
     fn from(entry: TimeLogEntry) -> TimeLogDay {
-        let mut v = Vec::new();
-        v.push(entry);
         TimeLogDay {
             date: entry.date,
-            entries: v,
+            entries: vec![entry],
         }
     }
 }
