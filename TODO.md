@@ -1,6 +1,8 @@
 # TODO
 
-1. Switch to `dirs` crate.
+1. Dependency changes:
+    * `dirs` crate for home dir
+    * `clap` for argument parsing
 2. Upgrade all deps.
 3. Make into a CLI framework.
     * All functions take a Cli context which handles output, global object storage etc.

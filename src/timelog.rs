@@ -159,7 +159,7 @@ impl PartialOrd for TimeLogEntry {
 }
 
 impl TimeLogEntry {
-    fn start(date: NaiveDate, entry_type: TimeLogEntryType, time: NaiveTime) -> Self {
+    fn from_start(date: NaiveDate, entry_type: TimeLogEntryType, time: NaiveTime) -> Self {
         TimeLogEntry {
             date,
             entry_type,
@@ -168,7 +168,7 @@ impl TimeLogEntry {
         }
     }
 
-    fn end(date: NaiveDate, entry_type: TimeLogEntryType, time: NaiveTime) -> Self {
+    fn from_end(date: NaiveDate, entry_type: TimeLogEntryType, time: NaiveTime) -> Self {
         TimeLogEntry {
             date,
             entry_type,
@@ -187,8 +187,20 @@ impl TimeLogEntry {
         self.end = Some(time);
     }
 
-    pub fn get_date(&self) -> NaiveDate {
+    pub fn date(&self) -> NaiveDate {
         self.date
+    }
+
+    pub fn start(&self) -> Option<NaiveTime> {
+        self.start
+    }
+
+    pub fn end(&self) -> Option<NaiveTime> {
+        self.end
+    }
+
+    pub fn ty(&self) -> TimeLogEntryType {
+        self.entry_type
     }
 }
 
@@ -286,26 +298,31 @@ impl From<TimeLogEntry> for TimeLogDay {
 
 macro_rules! gen_set {
     ($func: ident, $entry_field: ident, $entry_mutator: ident, $ctor: path) => {
-        pub fn $func(&mut self, time: NaiveTime, entry_type: TimeLogEntryType) {
+        pub fn $func(&mut self, time: NaiveTime, entry_type: TimeLogEntryType) -> TimeLogEntry {
             debug_assert!(self.validate_ordering());
             debug_assert!(time.nanosecond() == 0);
-            let mut found = false;
+            let mut out = None;
             for entry in &mut self.entries {
                 if entry.$entry_field.is_none() && entry.entry_type == entry_type {
-                    if found {
+                    if out.is_some() {
                         println!("WARN: Found more than one UNDEF this day");
                         break;
                     } else {
                         entry.$entry_mutator(time);
-                        found = true;
+                        out = Some(entry);
                     }
                 }
             }
 
-            if !found {
-                self.entries.push($ctor(self.date, entry_type, time));
-            }
+            let out = match out {
+                None => {
+                    self.entries.push($ctor(self.date, entry_type, time));
+                    *self.entries.last().expect("Just added this?")
+                }
+                Some(x) => *x,
+            };
             self.entries.sort();
+            out
         }
     };
 }
@@ -363,8 +380,8 @@ impl TimeLogDay {
         TimeLogDay { date, entries }
     }
 
-    gen_set!(set_end, end, set_end, TimeLogEntry::end);
-    gen_set!(set_start, start, set_start, TimeLogEntry::start);
+    gen_set!(set_end, end, set_end, TimeLogEntry::from_end);
+    gen_set!(set_start, start, set_start, TimeLogEntry::from_start);
 
     pub fn time_logged_with(
         &self,
@@ -478,16 +495,16 @@ mod tests {
     fn timelogentry_basic_mutators() {
         let tdy = Local::today().naive_local();
         let start_time = NaiveTime::from_hms(11, 30, 0);
-        let mut entry = TimeLogEntry::start(tdy, TimeLogEntryType::Work, start_time);
+        let mut entry = TimeLogEntry::from_start(tdy, TimeLogEntryType::Work, start_time);
         assert_eq!(entry.start, Some(start_time));
         let end_time = NaiveTime::from_hms(12, 30, 0);
         entry.set_end(end_time);
         assert_eq!(entry.end, Some(end_time));
-        let entry1 = TimeLogEntry::start(tdy, TimeLogEntryType::Work, start_time);
+        let entry1 = TimeLogEntry::from_start(tdy, TimeLogEntryType::Work, start_time);
         assert_eq!(entry1.start, Some(start_time));
-        let entry2 = TimeLogEntry::end(tdy, TimeLogEntryType::Work, start_time);
+        let entry2 = TimeLogEntry::from_end(tdy, TimeLogEntryType::Work, start_time);
         assert_eq!(entry2.end, Some(start_time));
-        let mut entry3 = TimeLogEntry::start(tdy, TimeLogEntryType::Work, start_time);
+        let mut entry3 = TimeLogEntry::from_start(tdy, TimeLogEntryType::Work, start_time);
         let end_time = NaiveTime::from_hms(12, 30, 0);
         entry3.set_end(end_time);
         assert_eq!(entry3.start, Some(start_time));

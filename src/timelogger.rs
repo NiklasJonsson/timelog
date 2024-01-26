@@ -86,22 +86,6 @@ macro_rules! gen_x_in_y_of {
     };
 }
 
-macro_rules! gen_log {
-    ($fname: ident, $mutator:ident) => {
-        pub fn $fname(&mut self, date: NaiveDate, time: NaiveTime) {
-            let entry_type = TimeLogEntryType::Work;
-            let hms_time = NaiveTime::from_hms(time.hour(), time.minute(), time.second());
-
-            let tld = match self.date2logday.entry(date) {
-                Vacant(entry) => entry.insert(TimeLogDay::empty(date)),
-                Occupied(entry) => entry.into_mut(),
-            };
-
-            tld.$mutator(hms_time, entry_type);
-        }
-    };
-}
-
 macro_rules! gen_time_logged_in_timeperiod_with {
     ($fname: ident, $start_date_f: ident, $end_date_f: ident) => {
         pub fn $fname(&self, date: NaiveDate, with: Option<NaiveTime>) -> TimeLogResult<Duration> {
@@ -193,7 +177,7 @@ impl TimeLogger {
     fn read_entries(&mut self, s: &str) -> TimeLogResult<()> {
         for line in s.lines() {
             let tle: TimeLogEntry = line.parse()?;
-            let date = tle.get_date();
+            let date = tle.date();
 
             let tld = match self.date2logday.entry(date) {
                 Vacant(entry) => entry.insert(TimeLogDay::empty(date)),
@@ -254,8 +238,25 @@ impl TimeLogger {
         get_sunday_in_week_of
     );
 
-    gen_log!(log_start, set_start);
-    gen_log!(log_end, set_end);
+    fn log_with(&mut self, date: NaiveDate, time: NaiveTime, mutator: fn(&mut TimeLogDay, NaiveTime, TimeLogEntryType) -> TimeLogEntry) -> TimeLogEntry { 
+     let entry_type = TimeLogEntryType::Work;
+        let time = NaiveTime::from_hms(time.hour(), time.minute(), time.second());
+
+        let tld = match self.date2logday.entry(date) {
+            Vacant(entry) => entry.insert(TimeLogDay::empty(date)),
+            Occupied(entry) => entry.into_mut(),
+        };
+
+        mutator(tld, time, entry_type)
+    }
+
+    pub fn log_start(&mut self, date: NaiveDate, time: NaiveTime) -> TimeLogEntry {
+        self.log_with(date, time, TimeLogDay::set_start)
+    }
+
+    pub fn log_end(&mut self, date: NaiveDate, time: NaiveTime) -> TimeLogEntry {
+        self.log_with(date, time, TimeLogDay::set_end)
+    }
 
     fn flextime_as_of(&self, date: NaiveDate) -> Duration {
         let mut keys: Vec<&NaiveDate> = self.date2logday.keys().collect();

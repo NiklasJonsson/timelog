@@ -20,6 +20,7 @@ pub fn get_time(s: Option<String>) -> ParseResult<NaiveTime> {
     }
 }
 
+// TODO: There is some duplication between start and end. Fix this.
 pub fn start(tl: &mut TimeLogger, time: Option<String>) -> ExitCode {
     let time = match get_time(time) {
         Ok(t) => t,
@@ -29,7 +30,14 @@ pub fn start(tl: &mut TimeLogger, time: Option<String>) -> ExitCode {
         }
     };
 
-    tl.log_start(Local::today().naive_local(), time);
+    let entry = tl.log_start(Local::today().naive_local(), time);
+
+    if let Err(e) = tl.save() {
+        println!("Failed to save to logfile: {}", e);
+        return ExitCode::FAILURE;
+    }
+
+    println!("Logged: starting {} at {}", entry.ty(), entry.start().expect("The start value was just set"));
 
     ExitCode::SUCCESS
 }
@@ -43,7 +51,15 @@ pub fn end(tl: &mut TimeLogger, time: Option<String>) -> ExitCode {
         }
     };
 
-    tl.log_end(Local::today().naive_local(), time);
+    let entry = tl.log_end(Local::today().naive_local(), time);
+
+    if let Err(e) = tl.save() {
+        println!("Failed to save to logfile: {}", e);
+        return ExitCode::FAILURE;
+    }
+
+    println!("Logged: ending {} at {}", entry.ty(), entry.end().expect("The end value was just set"));
+
     ExitCode::SUCCESS
 }
 
