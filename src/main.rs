@@ -55,8 +55,8 @@ The log is located at {log_location}"
         }
     };
 
-    let mut ctx = cli::Context::new();
-    ctx.set_global(tl);
+    let mut ctx = cli::Globals::new();
+    ctx.insert(tl);
     cli.exec_legacy(std::env::args(), &mut ctx)
         .map_err(|e| e.into())
 }

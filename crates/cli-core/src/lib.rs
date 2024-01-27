@@ -21,7 +21,7 @@ fn extract_args(fn_inputs: &Punctuated<FnArg, Comma>) -> Vec<Arg> {
     let mut out = vec![];
     for input in fn_inputs {
         match input {
-            FnArg::Receiver(_) => abort!(input, "Functions taking self are not supported"),
+            FnArg::Receiver(r) => abort!(r, "Functions taking self are not supported"),
             FnArg::Typed(pat_type) => match &*pat_type.pat {
                 Pat::Ident(pat_ident) => {
                     out.push(Arg {
@@ -71,7 +71,6 @@ fn transform_fn(item_fn: ItemFn) -> TokenStream {
         },
         ..item_fn
     };
-    let inputs = &impl_fn.sig.inputs;
 
     let fn_args = extract_args(&impl_fn.sig.inputs);
     let mut clap_builder: TokenStream = quote! {
@@ -85,28 +84,22 @@ fn transform_fn(item_fn: ItemFn) -> TokenStream {
         };
     }
 
-    // TODO: Use the output of extract_args
     let mut invoc_args: Punctuated<syn::Expr, Comma> = Punctuated::new();
-    for (idx, input) in inputs.iter().enumerate() {
-        match input {
-            FnArg::Receiver(_) => abort!(input, "Functions taking self are not supported"),
-            FnArg::Typed(pat_type) => {
-                let ty = pat_type.ty.clone();
-                let ident_str = &fn_args[idx].ident_str;
-                invoc_args.push(parse_quote! {
-                    // TODO: Cleanup deref
-                    *args.try_get_one::<#ty>(#ident_str).unwrap().unwrap()
-                });
-            }
-        }
+    for Arg { ident_str, ty, .. } in &fn_args {
+        let ty = ty.clone();
+        invoc_args.push(parse_quote! {
+            // TODO: Cleanup deref
+            *args.try_get_one::<#ty>(#ident_str).unwrap().unwrap()
+        });
     }
 
+    // TODO: Should we return (clap::Command, impl Fn) instead?
     quote! {
         pub fn #name(cli: &mut ::cli::Cli) {
             #impl_fn
 
             let cmd = #clap_builder;
-            cli.register_command(cmd, |#ctx_arg: &mut ::cli::Context, args: &::cli::clap::ArgMatches| -> ::cli::Result {
+            cli.register_command(cmd, |#ctx_arg: &mut ::cli::Globals, args: &::cli::clap::ArgMatches| -> ::cli::Result {
                 #impl_name(#invoc_args);
 
                 #fn_footer

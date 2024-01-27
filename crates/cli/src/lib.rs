@@ -4,9 +4,15 @@ use std::any::Any;
 
 pub use clap;
 
-pub struct Context {
+pub struct Globals {
     args: Vec<String>,
-    global: Option<Box<dyn Any>>,
+    globals: std::collections::HashMap<std::any::TypeId, Box<dyn Any>>,
+}
+
+impl Default for Globals {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[derive(Debug)]
@@ -44,21 +50,7 @@ impl std::error::Error for Error {}
 
 pub type Result = std::result::Result<(), Error>;
 
-impl Default for Context {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl Context {
-    pub fn output(&self) -> impl std::io::Write + 'static {
-        std::io::stdout()
-    }
-
-    pub fn error(&self) -> impl std::io::Write + 'static {
-        std::io::stderr()
-    }
-
+impl Globals {
     pub fn arg(&self, idx: usize) -> Option<&str> {
         self.args.get(idx).map(String::as_str)
     }
@@ -66,37 +58,34 @@ impl Context {
     pub fn new() -> Self {
         Self {
             args: Vec::new(),
-            global: None,
+            globals: Default::default(),
         }
     }
 
-    pub fn global<T>(&mut self) -> Option<&mut T>
+    pub fn get<T>(&mut self) -> Option<&mut T>
     where
         T: 'static,
     {
-        self.global.as_mut().and_then(|x| x.downcast_mut::<T>())
+        self.globals
+            .get_mut(&std::any::TypeId::of::<T>())
+            .and_then(|x| x.downcast_mut::<T>())
     }
 
-    pub fn set_global<T>(&mut self, global: T) -> Option<Box<dyn Any>>
+    pub fn insert<T>(&mut self, global: T) -> Option<Box<dyn Any>>
     where
         T: 'static,
     {
-        self.global.replace(Box::new(global))
+        self.globals
+            .insert(std::any::TypeId::of::<T>(), Box::new(global))
     }
 }
 
 pub trait CommandLegacy {
-    fn exec(&self, ctx: &mut Context) -> Result;
+    fn exec(&self, ctx: &mut Globals) -> Result;
 }
 
 pub trait Command {
-    fn exec(&self, ctx: &mut Context, args: &clap::ArgMatches) -> Result;
-}
-
-struct CommandEntryLegacy {
-    name: String,
-    args: Vec<String>,
-    cmd: Box<dyn CommandLegacy>,
+    fn exec(&self, ctx: &mut Globals, args: &clap::ArgMatches) -> Result;
 }
 
 struct CommandEntry {
@@ -105,7 +94,6 @@ struct CommandEntry {
 }
 
 pub struct Cli {
-    commands_legacy: Vec<CommandEntryLegacy>,
     commands: Vec<CommandEntry>,
     clap_builder: clap::Command,
 }
@@ -119,7 +107,6 @@ impl Default for Cli {
 impl Cli {
     pub fn new() -> Self {
         Self {
-            commands_legacy: Vec::new(),
             commands: Vec::new(),
             clap_builder: clap::Command::new("FIXME"),
         }
@@ -127,7 +114,6 @@ impl Cli {
 
     pub fn from_clap(cmd: clap::Command) -> Self {
         Self {
-            commands_legacy: Vec::new(),
             commands: Vec::new(),
             clap_builder: cmd,
         }
@@ -158,14 +144,14 @@ impl From<ArgParseError> for ArgFetchError {
 }
 
 pub trait ArgFetch: Sized {
-    fn fetch(ctx: &Context, idx: usize) -> std::result::Result<Self, ArgFetchError>;
+    fn fetch(ctx: &Globals, idx: usize) -> std::result::Result<Self, ArgFetchError>;
 }
 
 impl<T> ArgFetch for T
 where
     T: Arg,
 {
-    fn fetch(ctx: &Context, idx: usize) -> std::result::Result<Self, ArgFetchError> {
+    fn fetch(ctx: &Globals, idx: usize) -> std::result::Result<Self, ArgFetchError> {
         let input = ctx.arg(idx).ok_or(ArgFetchError::MissingArg { idx })?;
         <T as Arg>::parse(input).map_err(ArgParseError::into)
     }
@@ -175,7 +161,7 @@ impl<T> ArgFetch for Option<T>
 where
     T: Arg,
 {
-    fn fetch(ctx: &Context, idx: usize) -> std::result::Result<Self, ArgFetchError> {
+    fn fetch(ctx: &Globals, idx: usize) -> std::result::Result<Self, ArgFetchError> {
         match ctx.arg(idx) {
             Some(arg) => Ok(Some(<T as Arg>::parse(arg)?)),
             None => Ok(None),
@@ -203,7 +189,7 @@ impl Arg for usize {
 
 impl<F> IntoCommand<()> for F
 where
-    F: Fn(&mut Context) -> Result + 'static,
+    F: Fn(&mut Globals) -> Result + 'static,
 {
     fn create(self) -> Box<dyn CommandLegacy> {
         Box::new(FnCommandLegacy {
@@ -219,7 +205,7 @@ where
 impl<F, A> IntoCommand<A> for F
 where
     A: ArgFetch + 'static,
-    Self: Fn(&mut Context, A) -> Result + 'static,
+    Self: Fn(&mut Globals, A) -> Result + 'static,
 {
     fn create(self) -> Box<dyn CommandLegacy> {
         Box::new(FnCommandLegacy {
@@ -236,7 +222,7 @@ impl<F, A0, A1> IntoCommand<(A0, A1)> for F
 where
     A0: ArgFetch + 'static,
     A1: ArgFetch + 'static,
-    Self: Fn(&mut Context, A0, A1) -> Result + 'static,
+    Self: Fn(&mut Globals, A0, A1) -> Result + 'static,
 {
     fn create(self) -> Box<dyn CommandLegacy> {
         Box::new(FnCommandLegacy {
@@ -260,7 +246,7 @@ where
     A0: ArgFetch + 'static,
     A1: ArgFetch + 'static,
     A2: ArgFetch + 'static,
-    Self: Fn(&mut Context, A0, A1, A2) -> Result + 'static,
+    Self: Fn(&mut Globals, A0, A1, A2) -> Result + 'static,
 {
     fn create(self) -> Box<dyn CommandLegacy> {
         Box::new(FnCommandLegacy {
@@ -286,7 +272,7 @@ where
     A1: ArgFetch + 'static,
     A2: ArgFetch + 'static,
     A3: ArgFetch + 'static,
-    Self: Fn(&mut Context, A0, A1, A2, A3) -> Result + 'static,
+    Self: Fn(&mut Globals, A0, A1, A2, A3) -> Result + 'static,
 {
     fn create(self) -> Box<dyn CommandLegacy> {
         Box::new(FnCommandLegacy {
@@ -313,21 +299,21 @@ where
 }
 
 struct FnCommandLegacy {
-    fun: Box<dyn Fn(&mut Context) -> Result>,
+    fun: Box<dyn Fn(&mut Globals) -> Result>,
 }
 
 struct FnCommand {
-    fun: Box<dyn Fn(&mut Context, &::clap::ArgMatches) -> Result>,
+    fun: Box<dyn Fn(&mut Globals, &::clap::ArgMatches) -> Result>,
 }
 
 impl Command for FnCommand {
-    fn exec(&self, ctx: &mut Context, args: &clap::ArgMatches) -> Result {
+    fn exec(&self, ctx: &mut Globals, args: &clap::ArgMatches) -> Result {
         (self.fun)(ctx, args)
     }
 }
 
 impl CommandLegacy for FnCommandLegacy {
-    fn exec(&self, ctx: &mut Context) -> Result {
+    fn exec(&self, ctx: &mut Globals) -> Result {
         (self.fun)(ctx)
     }
 }
@@ -337,39 +323,10 @@ impl Cli {
     where
         S: Into<String>,
     {
-        self.commands_legacy.push(CommandEntryLegacy {
-            name: name.into(),
-            args: cmd.args(),
-            cmd: cmd.create(),
-        });
     }
 
-    pub fn exec_legacy(&mut self, args: std::env::Args, ctx: &mut Context) -> Result {
+    pub fn exec_legacy(&mut self, args: std::env::Args, ctx: &mut Globals) -> Result {
         todo!()
-        /*
-              let args = args.collect::<Vec<String>>();
-
-              let mut cmd_builder: clap::Command = self.clap_builder.clone();
-
-              for CommandEntryLegacy { name, args, .. } in &self.commands_legacy {
-                  let mut subcmd = clap::Command::new(name);
-                  for arg in args {
-                      subcmd = subcmd.arg(clap::Arg::new(arg));
-                  }
-                  cmd_builder = cmd_builder.subcommand(subcmd);
-              }
-
-              let clap_cli = cmd_builder.get_matches_from(&args);
-
-              for CommandEntryLegacy { name, cmd, .. } in &self.commands_legacy {
-                  if let Some(_matches) = clap_cli.subcommand_matches(name) {
-                      log::debug!("Executing {name} with args: {:?}", ctx.args);
-                      return cmd.exec(ctx);
-                  }
-              }
-
-              Err(Error::NoSuchCommand { args })
-        */
     }
 }
 
@@ -381,7 +338,7 @@ impl Cli {
     pub fn register_command(
         &mut self,
         clap_cmd: clap::Command,
-        fn_impl: impl Fn(&mut Context, &::clap::ArgMatches) -> Result + 'static,
+        fn_impl: impl Fn(&mut Globals, &::clap::ArgMatches) -> Result + 'static,
     ) {
         let name = clap_cmd.get_name().to_string();
         self.clap_builder = self.clap_builder.clone().subcommand(clap_cmd);
@@ -393,7 +350,7 @@ impl Cli {
         });
     }
 
-    pub fn exec(&mut self, args: std::env::Args, ctx: &mut Context) -> Result {
+    pub fn exec(&mut self, args: std::env::Args, ctx: &mut Globals) -> Result {
         let args = args.collect::<Vec<String>>();
         let cmd = self.clap_builder.clone();
         let matches = cmd.get_matches_from(&args);
@@ -407,30 +364,5 @@ impl Cli {
         }
 
         Err(Error::NoSuchCommand { args })
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn test0(_: &mut Context) -> Result {
-        Ok(())
-    }
-
-    fn test1(_: &mut Context, _: String) -> Result {
-        Ok(())
-    }
-
-    fn test2(_: &mut Context, _: Option<String>) -> Result {
-        Ok(())
-    }
-
-    #[test]
-    fn test_register() {
-        let mut cli = Cli::new();
-        cli.register_legacy("test0", test0);
-        cli.register_legacy("test1", test1);
-        cli.register_legacy("test2", test2);
     }
 }

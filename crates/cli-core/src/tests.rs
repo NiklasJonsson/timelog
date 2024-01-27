@@ -30,9 +30,8 @@ fn assert_tokens_eq(expected: &TokenStream, actual: &TokenStream) {
     }
 }
 
-#[test]
+// #[test]
 fn sandbox() {
-    return;
     let before = quote! {
         fn onearg(x: usize) {
             println!("Hello, universe!");

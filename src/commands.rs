@@ -1,5 +1,3 @@
-use std::io::Write as _;
-
 use chrono::{Datelike as _, Duration, Local, NaiveDate, NaiveTime, ParseResult};
 
 use crate::timelog::TimeLogEntryType;
@@ -29,27 +27,26 @@ fn save_log(timelogger: &mut TimeLogger) -> cli::Result {
         .map_err(|e| cli::Error::App(format!("Failed to save to logfile: {e}")))
 }
 
-pub fn start(ctx: &mut cli::Context, time: Option<String>) -> cli::Result {
+pub fn start(ctx: &mut cli::Globals, time: Option<String>) -> cli::Result {
     let time = get_time(time.as_deref())?;
 
-    let tl: &mut TimeLogger = ctx.global::<TimeLogger>().expect("No global timelogger");
+    let tl: &mut TimeLogger = ctx.get::<TimeLogger>().expect("No global timelogger");
     let entry = tl.log_start(Local::today().naive_local(), time);
 
     save_log(tl)?;
-    writeln!(
-        ctx.output(),
+    println!(
         "Logged: Starting {} at {}",
         entry.ty(),
         entry.start().expect("The start value was just set")
-    )?;
+    );
 
     Ok(())
 }
 
-pub fn end(ctx: &mut cli::Context, time: Option<String>) -> cli::Result {
+pub fn end(ctx: &mut cli::Globals, time: Option<String>) -> cli::Result {
     let time = get_time(time.as_deref())?;
 
-    let tl: &mut TimeLogger = ctx.global::<TimeLogger>().expect("No global timelogger");
+    let tl: &mut TimeLogger = ctx.get::<TimeLogger>().expect("No global timelogger");
     let entry = tl.log_end(Local::today().naive_local(), time);
 
     if let Err(e) = tl.save() {
@@ -156,8 +153,8 @@ fn get_date_for_month_cmd(args: &Args) -> NaiveDate {
     }
 }
 
-pub fn month(ctx: &mut cli::Context) -> cli::Result {
-    let tl: &mut TimeLogger = ctx.global::<TimeLogger>().expect("No global timelogger");
+pub fn month(ctx: &mut cli::Globals) -> cli::Result {
+    let tl: &mut TimeLogger = ctx.get::<TimeLogger>().expect("No global timelogger");
     let args = todo!();
 
     let date = get_date_for_month_cmd(&args);
@@ -194,18 +191,17 @@ pub fn month(ctx: &mut cli::Context) -> cli::Result {
         }
     };
 
-    writeln!(
-        ctx.output(),
+    println!(
         "{} worked this month\n{} left this month",
         fmt_dur(time_worked),
         fmt_dur(time_left)
-    )?;
+    );
 
     Ok(())
 }
 
-pub fn week(ctx: &mut cli::Context) -> cli::Result {
-    let tl: &mut TimeLogger = ctx.global::<TimeLogger>().expect("No global timelogger");
+pub fn week(ctx: &mut cli::Globals) -> cli::Result {
+    let tl: &mut TimeLogger = ctx.get::<TimeLogger>().expect("No global timelogger");
     let args = todo!();
     let date = get_date_for_week_cmd(&args);
     let week_text_fmt = get_text_for_monthweek_cmd(&args);
@@ -243,20 +239,19 @@ pub fn week(ctx: &mut cli::Context) -> cli::Result {
         }
     };
 
-    writeln!(
-        ctx.output(),
+    println!(
         "{0} worked {3} week\n{1} left {3} week ({2} of which is flex)",
         fmt_dur(time_worked),
         fmt_dur(time_left),
         fmt_dur(flex),
         week_text_fmt
-    )?;
+    );
 
     Ok(())
 }
 
-pub fn day(ctx: &mut cli::Context) -> cli::Result {
-    let tl: &mut TimeLogger = ctx.global::<TimeLogger>().expect("No global timelogger");
+pub fn day(ctx: &mut cli::Globals) -> cli::Result {
+    let tl: &mut TimeLogger = ctx.get::<TimeLogger>().expect("No global timelogger");
     let args = todo!();
     let date = get_date_for_day_cmd(&args);
     let day_text_fmt = get_text_for_day_cmd(&args);
@@ -282,35 +277,29 @@ pub fn day(ctx: &mut cli::Context) -> cli::Result {
             )));
         }
     };
-    writeln!(
-        ctx.output(),
-        "{} worked {}",
-        fmt_dur(worked_time),
-        day_text_fmt
-    )?;
+    println!("{} worked {}", fmt_dur(worked_time), day_text_fmt);
     Ok(())
 }
 
-pub fn view(ctx: &mut cli::Context, n_entries: Option<usize>) -> cli::Result {
-    let mut out = ctx.output();
-    let tl: &mut TimeLogger = ctx.global::<TimeLogger>().expect("No global timelogger");
+pub fn view(ctx: &mut cli::Globals, n_entries: Option<usize>) -> cli::Result {
+    let tl: &mut TimeLogger = ctx.get::<TimeLogger>().expect("No global timelogger");
     let n_entries = n_entries.unwrap_or(2);
     for tld in tl.get_latest_n_entries(n_entries) {
-        writeln!(out, "{}", tld)?;
+        println!("{}", tld);
     }
 
     Ok(())
 }
 
 pub fn batch(
-    ctx: &mut cli::Context,
+    ctx: &mut cli::Globals,
     arg_type: String,
     from: String,
     to: String,
     weekday_only: Option<bool>,
 ) -> cli::Result {
     use std::str::FromStr;
-    let tl: &mut TimeLogger = ctx.global::<TimeLogger>().expect("No global timelogger");
+    let tl: &mut TimeLogger = ctx.get::<TimeLogger>().expect("No global timelogger");
 
     let ty = match TimeLogEntryType::from_str(arg_type.as_str()) {
         Ok(x) => x,
