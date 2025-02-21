@@ -1,8 +1,8 @@
 [package]
 name = "timelog"
 version = "0.1.0"
-authors = ["Niklas Jonsson <niklasandersjonsson@gmail.com>"]
-edition = "2021"
+authors = ["Niklas Wallgren <niklasandersjonsson@gmail.com>"]
+edition = "2024"
 
 [dependencies]
 docopt = "0.8"
